@@ -5,7 +5,12 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// jsdom does not implement scrollIntoView; the auto-scroll effect needs it.
+beforeAll(() => {
+  Element.prototype.scrollIntoView = vi.fn();
+});
 
 import { SESSION_STORAGE_KEY, type Turn } from "../store";
 import { ShopPage } from "./shop-page";
@@ -238,6 +243,16 @@ describe("ShopPage transcript", () => {
 });
 
 describe("ShopPage thinking states", () => {
+  it("scrolls the newest turn into view as turns arrive", () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    setHook({
+      turns: [makeTurn({ id: 1, userText: "hello", deltas: "Hi." })],
+    });
+    render(<ShopPage />);
+    expect(scrollIntoView).toHaveBeenCalled();
+  });
+
   it("shows the thinking skeleton while streaming with no prose yet", () => {
     setHook({
       phase: "streaming",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { SESSION_STORAGE_KEY } from "../store";
 import {
@@ -60,6 +60,12 @@ export function ShopPage() {
     () => true,
     () => false,
   );
+  // Keep the newest turn in view while the agent streams (deltas mutate the
+  // turns array, so this fires on every fragment).
+  const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [turns]);
 
   const submit = useCallback(
     async (input: Omit<AgentTurnInput, "resume">): Promise<void> => {
@@ -129,6 +135,7 @@ export function ShopPage() {
               ))}
             </ol>
           )}
+          <div ref={transcriptEndRef} aria-hidden="true" />
         </div>
       </main>
 
