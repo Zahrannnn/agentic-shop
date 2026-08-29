@@ -14,14 +14,25 @@ from app.config import Settings, get_settings, require_real_config
 
 pytestmark = pytest.mark.usefixtures("mock_settings")
 
-_ENV_KEYS: tuple[str, ...] = ("LLM_MODE", "LLM_MODEL", "OPENCODE_BASE_URL", "OPENCODE_API_KEY")
+_ENV_KEYS: tuple[str, ...] = (
+    "LLM_MODE",
+    "LLM_MODEL",
+    "OPENCODE_BASE_URL",
+    "OPENCODE_API_KEY",
+    "LLM_API_STYLE",
+)
 
 
 @pytest.fixture
 def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Strip every settings variable so defaults are actually exercised."""
+    """Strip every settings variable so defaults are actually exercised.
+
+    Also disables the optional ``.env`` file: a developer's real ``.env``
+    (gitignored) must never influence test outcomes.
+    """
     for key in _ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(Settings, "model_config", {**Settings.model_config, "env_file": None})
 
 
 def test_get_settings_defaults_to_mock_when_env_empty(clean_env) -> None:

@@ -31,7 +31,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, ValidationError
 
 __all__ = [
@@ -415,15 +415,26 @@ def call_structured[ModelT: BaseModel](
 ) -> ModelT:
     """Invoke *llm* for *schema* with validate -> retry once -> fail clean.
 
-    Validates whatever the client returns with ``schema.model_validate``
-    (the safety net even when the client already returns instances). On
-    ``ValidationError`` the call is retried EXACTLY once with a user message
-    containing the validation error text appended; a second failure raises
-    :class:`StructuredOutputError` for the graph to map to one ``error`` event.
+    Native ``with_structured_output`` is tried first. Some gateway models only
+    expose the Responses API or reject strict JSON schemas; when the native
+    call fails at request time the model is remembered in
+    :data:`_JSON_MODE_MODELS` and subsequent calls use schema-in-prompt JSON
+    mode (:func:`_call_structured_json`) instead. Either way, outputs are
+    Pydantic-validated (the safety net), a failed validation is retried
+    EXACTLY once with the validation error fed back, and a second failure
+    raises :class:`StructuredOutputError` for the graph to map to one
+    ``error`` event.
     """
     base_messages = _as_message_list(messages)
+    model_key = str(getattr(llm, "model_name", "") or id(llm))
+    if model_key in _JSON_MODE_MODELS:
+        return _call_structured_json(llm, schema, base_messages)
     structured = llm.with_structured_output(schema)
-    result = structured.invoke(base_messages)
+    try:
+        result = structured.invoke(base_messages)
+    except Exception:  # noqa: BLE001 — any request-time failure -> JSON mode
+        _JSON_MODE_MODELS.add(model_key)
+        return _call_structured_json(llm, schema, base_messages)
     try:
         return schema.model_validate(result)
     except ValidationError as first_error:
@@ -441,6 +452,72 @@ def call_structured[ModelT: BaseModel](
             return schema.model_validate(retried)
         except ValidationError as second_error:
             raise StructuredOutputError(str(second_error)) from second_error
+
+
+def _result_text(result: Any) -> str:
+    """Extract assistant text from an LLM response (message or bare string)."""
+    text = getattr(result, "text", None)
+    if isinstance(text, str) and text:
+        return text
+    return _message_text(result)
+
+
+def _extract_json_object(text: str) -> Any:
+    """Parse the first JSON object embedded in *text* (lenient about fences).
+
+    Raises ``ValueError`` (``json.JSONDecodeError``) when no object is found —
+    the caller treats that exactly like a validation failure.
+    """
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match is None:
+        raise ValueError("no JSON object found in model response")
+    return json.loads(match.group(0))
+
+
+def _call_structured_json[ModelT: BaseModel](
+    llm: Any,
+    schema: type[ModelT],
+    base_messages: list[Any],
+) -> ModelT:
+    """Schema-in-prompt JSON mode for models without native structured output.
+
+    The JSON schema travels in the prompt; the reply is extracted, parsed, and
+    Pydantic-validated. Same retry semantics as the native path: exactly one
+    retry with the validation error fed back, then
+    :class:`StructuredOutputError`.
+    """
+    instruction = SystemMessage(
+        content=(
+            "Respond with ONLY a JSON object that conforms to the following "
+            "JSON schema. No markdown fences, no commentary, no extra text:\n"
+            + json.dumps(schema.model_json_schema())
+        )
+    )
+    messages: list[Any] = [*base_messages, instruction]
+    last_error: ValueError | None = None
+    for _attempt in range(2):
+        try:
+            data = _extract_json_object(_result_text(llm.invoke(messages)))
+            return schema.model_validate(data)
+        except ValueError as error:  # JSONDecodeError and ValidationError
+            last_error = error
+            messages = [
+                *base_messages,
+                instruction,
+                HumanMessage(
+                    content=(
+                        f"Your previous response failed validation: {error}. "
+                        "Respond again with ONLY a JSON object conforming to "
+                        "the schema."
+                    )
+                ),
+            ]
+    raise StructuredOutputError(str(last_error))
+
+
+#: Models that failed their native structured-output contract at request time
+#: (e.g. Responses-only gateway models). Cleared by :func:`reset_llm_cache`.
+_JSON_MODE_MODELS: set[str] = set()
 
 
 # ---------------------------------------------------------------------------
@@ -462,15 +539,17 @@ class _BootstrapSettings:
     LLM_MODEL: str = ""
     OPENCODE_BASE_URL: str = ""
     OPENCODE_API_KEY: str = ""
+    LLM_API_STYLE: str = "auto"
 
     @classmethod
     def from_env(cls) -> _BootstrapSettings:
-        """Read the four settings straight from process environment."""
+        """Read the settings straight from process environment."""
         return cls(
             LLM_MODE=os.environ.get("LLM_MODE", "mock"),
             LLM_MODEL=os.environ.get("LLM_MODEL", ""),
             OPENCODE_BASE_URL=os.environ.get("OPENCODE_BASE_URL", ""),
             OPENCODE_API_KEY=os.environ.get("OPENCODE_API_KEY", ""),
+            LLM_API_STYLE=os.environ.get("LLM_API_STYLE", "auto"),
         )
 
 
@@ -511,15 +590,23 @@ def _build_llm(settings: Any) -> Any:
         )
     from langchain_openai import ChatOpenAI  # noqa: PLC0415 — lazy, mock stays light
 
+    # LLM_API_STYLE=responses selects gateway models that only expose the
+    # OpenAI Responses API (e.g. muse-spark on OpenCode Zen). Passing the
+    # responses-only "truncation" key makes langchain route requests to
+    # /responses instead of /chat/completions; it is a valid no-op there.
+    api_style = str(settings.LLM_API_STYLE or "").strip().lower()
+    model_kwargs = {"truncation": "disabled"} if api_style == "responses" else None
     return ChatOpenAI(
         model=settings.LLM_MODEL,
         api_key=settings.OPENCODE_API_KEY,
         base_url=settings.OPENCODE_BASE_URL or None,
         temperature=0,  # literal 0 — determinism, constitution III
+        timeout=120,
+        model_kwargs=model_kwargs,
     )
 
 
-_llm_cache_key: tuple[str, str, str, str] | None = None
+_llm_cache_key: tuple[str, str, str, str, str] | None = None
 _cached_llm: Any | None = None
 
 
@@ -538,10 +625,12 @@ def get_llm() -> Any:
         str(settings.LLM_MODEL or ""),
         str(settings.OPENCODE_BASE_URL or ""),
         str(settings.OPENCODE_API_KEY or ""),
+        str(getattr(settings, "LLM_API_STYLE", "auto") or "auto"),
     )
     if _cached_llm is None or key != _llm_cache_key:
         _cached_llm = _build_llm(settings)
         _llm_cache_key = key
+        _JSON_MODE_MODELS.clear()
     return _cached_llm
 
 
@@ -550,3 +639,4 @@ def reset_llm_cache() -> None:
     global _llm_cache_key, _cached_llm
     _llm_cache_key = None
     _cached_llm = None
+    _JSON_MODE_MODELS.clear()

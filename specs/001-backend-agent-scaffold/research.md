@@ -156,3 +156,27 @@ items remain.
   research node free of runtime NLP (FR-005).
 - **Alternatives considered**: SQLite (no query need at 28 items — principle
   VIII); multiple per-category files (only one category in MVP).
+
+## R11 — Responses-API gateway models and the structured-output fallback
+
+- **Decision**: Added `LLM_API_STYLE` (`auto` | `responses`) to the settings.
+  When `responses`, the factory passes a responses-only parameter so langchain
+  routes requests to `/responses` instead of `/chat/completions` — required
+  for OpenCode Zen models like `muse-spark-1.2-contributor-free` that do not
+  serve chat completions. Additionally, `call_structured` now degrades
+  gracefully: it tries native `with_structured_output` first, and if the
+  provider rejects the native structured-output contract at request time, it
+  remembers the model and switches to schema-in-prompt JSON mode (schema JSON
+  in the prompt, reply parsed and Pydantic-validated). Retry semantics are
+  identical in both modes: exactly one validation-error retry, then a clean
+  `StructuredOutputError`.
+- **Rationale**: Verified against the live Zen gateway (2026-08-29): muse
+  answers `/chat/completions` with HTTP 500 and rejects non-strict JSON
+  schemas upstream; the Responses path with schema-in-prompt returns clean,
+  schema-conforming JSON. The fallback keeps principle IV intact for any
+  flaky free model instead of coupling the pipeline to one provider quirk.
+- **Alternatives considered**: forcing strict JSON schemas for every model
+  (upstream rejects open dicts like `priorities`); switching to the OpenAI
+  Responses SDK wholesale (larger change, no benefit for other models);
+  model-per-model capability config files (unnecessary — one env knob plus
+  automatic fallback covers the observed matrix).

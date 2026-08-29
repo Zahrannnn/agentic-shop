@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     LLM_MODEL: str = ""
     OPENCODE_BASE_URL: str = ""
     OPENCODE_API_KEY: str = ""
+    #: "auto" (default) or "responses" for gateway models that only expose
+    #: the OpenAI Responses API (e.g. muse-spark on OpenCode Zen).
+    LLM_API_STYLE: str = "auto"
 
     @property
     def is_mock(self) -> bool:
