@@ -135,22 +135,6 @@ function composerBox(): HTMLTextAreaElement {
   ) as HTMLTextAreaElement;
 }
 
-function stageItem(label: string): HTMLElement {
-  const item = screen.getByText(label).closest("li");
-  if (!item) {
-    throw new Error(`no stepper item found for "${label}"`);
-  }
-  return item;
-}
-
-function stageItemByStage(stage: string): HTMLElement {
-  const item = document.querySelector(`[data-stage="${stage}"]`);
-  if (!(item instanceof HTMLElement)) {
-    throw new Error(`no stepper item found for stage "${stage}"`);
-  }
-  return item;
-}
-
 function sendMessage(text: string): void {
   fireEvent.change(composerBox(), { target: { value: text } });
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -253,51 +237,54 @@ describe("ShopPage transcript", () => {
   });
 });
 
-describe("ShopPage stepper", () => {
-  it("shows done stages in ink with ordinals, the live stage teal, the rest pencil", () => {
+describe("ShopPage thinking states", () => {
+  it("shows the thinking skeleton while streaming with no prose yet", () => {
+    setHook({
+      phase: "streaming",
+      isBusy: true,
+      turns: [makeTurn({ id: 1, userText: "recommend headphones" })],
+    });
+    render(<ShopPage />);
+
+    const thinking = screen.getByTestId("turn-thinking");
+    expect(thinking).toHaveAttribute("role", "status");
+    expect(thinking).toHaveTextContent("Thinking…");
+    expect(thinking.querySelectorAll(".animate-pulse").length).toBeGreaterThan(0);
+    expect(screen.queryByTestId("plan-skeleton")).not.toBeInTheDocument();
+  });
+
+  it("shows a plan skeleton once prose started and the plan has not landed", () => {
     setHook({
       phase: "streaming",
       isBusy: true,
       turns: [
-        makeTurn({
-          id: 1,
-          userText: "recommend headphones",
-          stages: ["intent_parsed", "searching"],
-        }),
+        makeTurn({ id: 1, userText: "recommend headphones", deltas: "Here is my pick…" }),
       ],
     });
     render(<ShopPage />);
 
-    const intent = stageItem("Intent");
-    expect(intent).toHaveAttribute("data-stage", "intent_parsed");
-    expect(intent).toHaveAttribute("data-state", "done");
-    expect(intent).toHaveClass("text-foreground");
-    expect(intent).toHaveTextContent("01");
-
-    const search = stageItem("Search");
-    expect(search).toHaveAttribute("data-state", "active");
-    expect(search).toHaveClass("text-primary");
-    expect(search).toHaveAttribute("aria-current", "step");
-
-    const rank = stageItem("Rank");
-    expect(rank).toHaveAttribute("data-state", "pending");
-    expect(rank).toHaveClass("text-muted-foreground");
+    expect(screen.getByTestId("plan-skeleton")).toBeInTheDocument();
+    expect(screen.queryByTestId("turn-thinking")).not.toBeInTheDocument();
   });
 
-  it("carries the found_n count on the Found stage when present", () => {
+  it("renders neither skeleton once the plan is rendered", () => {
     setHook({
       turns: [
         makeTurn({
           id: 1,
-          stages: ["intent_parsed", "searching", "found_n"],
-          foundCount: 14,
+          userText: "recommend headphones",
+          deltas: "Here is my pick.",
+          planState: "rendered",
+          plan: TEXT_BLOCK_PLAN,
           terminal: { kind: "turn_end" },
         }),
       ],
     });
     render(<ShopPage />);
 
-    expect(stageItemByStage("found_n")).toHaveTextContent("Found · 14");
+    expect(screen.queryByTestId("turn-thinking")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("plan-skeleton")).not.toBeInTheDocument();
+    expect(screen.getByTestId("plan-text_block")).toBeInTheDocument();
   });
 });
 
