@@ -7,9 +7,16 @@ binding architecture record. The PRD (`PRD.md`) describes product intent; where 
 
 ## Current phase
 
-**Phase 1 — backend scaffold.** The `frontend/` directory does not exist yet (owner will
-supply a Next.js boilerplate). Do not create frontend code, package.json files, or React
-components. Backend work only until the owner says otherwise.
+**Phase 2 — frontend renderer & chat (in progress).** Phase 1 backend is complete and
+merged; the frontend lives in `frontend/` (adopted `corelia-next-boilerplate`, Next.js 16
++ React 19 + Tailwind v4 + Zod v4 + Redux Toolkit, npm — feature-first layout, see
+`frontend/AGENTS.md`). Frontend agents MUST read `FRONTEND_GUIDE.md` and
+`specs/002-frontend-ui-renderer/` before writing code; plan code as
+`$speckit-implement` of that task list. Backend changes now require an architecture
+reason and must keep `backend/` tests green.
+
+**Phase 1 — backend scaffold (complete).** History: built per the target layout below,
+reviewed, and merged via PRs #1–#3.
 
 ## Backend conventions
 
