@@ -1,0 +1,24 @@
+{
+  "planVersion": "1",
+  "sessionId": "spec-fixture",
+  "turnId": 1,
+  "root": {
+    "type": "preference_picker",
+    "props": {
+      "question": "Which category are you shopping for?",
+      "options": ["Headphones", "Something else"]
+    },
+    "actions": [
+      {
+        "type": "select_preference",
+        "label": "Headphones",
+        "payload": { "value": "headphones" }
+      },
+      {
+        "type": "select_preference",
+        "label": "Something else",
+        "payload": { "value": "other" }
+      }
+    ]
+  }
+}
