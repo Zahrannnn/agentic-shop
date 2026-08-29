@@ -180,3 +180,56 @@ items remain.
   Responses SDK wholesale (larger change, no benefit for other models);
   model-per-model capability config files (unnecessary — one env knob plus
   automatic fallback covers the observed matrix).
+
+## R12 — Architecture review adjudication (post-Phase-1)
+
+An independent review of the implemented backend (2026-08-29) returned
+**sound-with-conditions**; this entry records the adjudicated decisions and
+the accepted debt so they stop being tribal knowledge.
+
+**Decisions (implemented in this pass):**
+
+- **Plan selection is code-owned.** The `PlanSelection` model call was removed
+  from `ui_plan_node`; component choice and title are deterministic constants
+  in code. This is a conscious deviation from PRD §12's "UI Agent chooses the
+  component": the LLM choice was never honored, and code-owned assembly is
+  more reliable and one model call cheaper per turn. Revisit only when a
+  component set exists that genuinely benefits from model selection.
+- **`404 unknown_session` implemented** via an additive `ChatRequest.resume`
+  flag (default `false`): a new session and a stale session are
+  indistinguishable without a client signal, so `resume: true` + unknown
+  session answers the contracted 404; `resume: false` always proceeds and
+  registers the session. Guard order: 404 → 409 → stream.
+- **CORS answered with middleware** (not a proxy-only contract amendment):
+  `ALLOWED_ORIGINS` (comma-separated, defaulting to the Next.js dev ports),
+  methods `GET, POST, OPTIONS`, headers `Content-Type, Authorization`,
+  credentials off. Browsers can call the API directly in dev; proxying through
+  Next.js server routes remains a valid client choice.
+- **`LLM_MODE`/`LLM_API_STYLE` are validated** (case-insensitive; typos like
+  `LLM_MODE=rel` now fail fast instead of silently running mock).
+- **JSON-mode fallback trigger narrowed** to provider request-contract
+  rejections (HTTP status 400/404/422 on the native call); transient errors
+  (timeouts, 5xx) now propagate to the normal clean-error path instead of
+  permanently downgrading the model's output enforcement.
+- **`graph/followups.py` extracted** from `nodes.py` (pure resolver, zero
+  behavior change) to keep the node module from accreating Phase 2 changes.
+
+**Accepted debt (recorded, fix opportunistically):**
+
+- Mock-mechanics sentinel blocks (`<<<CONTEXT>>>…`) travel inside production
+  prompts, and the priority-alias table is duplicated between `llm/client.py`
+  and `graph/nodes.py`.
+- Real-mode determinism: FR-015 byte-identical rankings are a mock-mode
+  guarantee; in real mode the scorer is deterministic *given* the weights, but
+  weights come from a temp-0 model call that is not a hard cross-call
+  contract.
+- Client disconnect mid-turn does not cancel the in-flight graph run (benign
+  single-user; burns LLM budget).
+- The in-stream `busy`/`unknown_session` error codes are reserved vocabulary
+  — unreachable by design (409/404 answer those cases pre-stream).
+- The loader rejects a malformed catalog record outright rather than scoring
+  partial products neutrally (spec edge case wording); for a curated shipped
+  dataset the loud failure is the better behavior, and the scorer keeps a
+  defensive neutral fill.
+- Single-process constraint: sessions, live-session set, and busy guard are
+  in-process state; multi-worker deployment requires a shared store (V2).

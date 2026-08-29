@@ -69,6 +69,14 @@ class ChatRequest(BaseModel):
 
     Keys stay snake_case per the contract. A valid turn needs at least one
     of ``message`` (non-empty after whitespace-stripping) or ``ui_action``.
+
+    ``resume`` is additive and backward-compatible (architecture-review fix):
+    it lets a client distinguish "reattach to a session I already started"
+    from "start a new one". ``resume=true`` on a session this backend process
+    has never seen is rejected with ``404 unknown_session`` BEFORE any turn
+    starts (contracts/http-api.md: after a backend restart the client
+    receives 404 and MUST start a new session, i.e. retry without the flag);
+    ``resume=false`` always proceeds and registers the session.
     """
 
     session_id: Annotated[
@@ -77,6 +85,7 @@ class ChatRequest(BaseModel):
     ]
     message: Annotated[str, StringConstraints(max_length=2000)] = ""
     ui_action: UIActionIn | None = None
+    resume: bool = False
 
     @model_validator(mode="after")
     def _require_message_or_ui_action(self) -> Self:

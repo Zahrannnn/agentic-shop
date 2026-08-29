@@ -32,8 +32,9 @@ from app.catalog.loader import load_catalog
 from app.dsl.models import UIPlan
 from app.dsl.validate import serialize_plan, validate_plan
 from app.graph.builder import get_graph
-from app.graph.nodes import NO_PRODUCTS_DISCLOSURE, FollowUp, resolve_followup
-from app.llm.client import StructuredOutputError
+from app.graph.nodes import NO_PRODUCTS_DISCLOSURE
+from app.graph.schemas import PreferenceWeights
+from app.llm.client import _JSON_MODE_MODELS, StructuredOutputError, call_structured
 from app.ranking.scorer import score_products
 
 pytestmark = pytest.mark.usefixtures("mock_settings")
@@ -294,7 +295,6 @@ async def test_us2_chip_answer_skips_intent_llm_and_completes(monkeypatch) -> No
     fake = _RecordingFake(
         [
             {"anc": 0.0, "comfort": 0.0, "battery": 0.0, "sound": 0.0, "value": 0.0},
-            {"component": "product_grid", "title": "Best matches", "product_ids": []},
             {"intro": "Here are some options.", "per_product": [], "outro": "Want more?"},
         ]
     )
@@ -328,8 +328,9 @@ async def test_us2_chip_answer_skips_intent_llm_and_completes(monkeypatch) -> No
         },
         config=config,
     )
-    # Exactly the three post-intent calls ran: IntentExtraction was skipped.
-    assert fake.schemas == ["PreferenceWeights", "PlanSelection", "Narration"]
+    # Exactly the two post-intent calls ran: IntentExtraction was skipped, and
+    # plan assembly is code-owned (no PlanSelection call exists anymore).
+    assert fake.schemas == ["PreferenceWeights", "Narration"]
     assert state["intent"]["category"] == "headphones"
     assert state["plan"]["root"]["type"] == "product_grid"
     assert state.get("error") is None
@@ -482,99 +483,9 @@ def test_us3_answer_plan_validates_and_replaces_ask_plan() -> None:
 
 
 # ---------------------------------------------------------------------------
-# US4: multi-turn follow-ups in one session
+# US4: multi-turn follow-ups in one session (pure resolver unit tests live
+# in tests/test_followups.py)
 # ---------------------------------------------------------------------------
-
-
-def _followup_state(
-    text: str,
-    selected: list[str] | None = None,
-    ranked: list[str] | None = None,
-    action: dict | None = None,
-) -> dict:
-    """Synthetic session state for the pure follow-up resolver.
-
-    ``selected`` defaults to the presented podium (as after a grid turn);
-    pass ``selected=[]`` for an empty session.
-    """
-    return {
-        "pending_user_text": text,
-        "pending_ui_action": action,
-        "selected_ids": list(EXPECTED_TOP3 if selected is None else selected),
-        # ranked entries as plain dicts — exercises the restore-tolerant
-        # branch of the resolver's ranking reader.
-        "ranked": [{"product_id": pid} for pid in (ranked or [])],
-    }
-
-
-def test_us4_resolve_followup_patterns() -> None:
-    """Table-driven coverage of the deterministic text/action fast paths."""
-    first, second, third = EXPECTED_TOP3
-    assert resolve_followup(_followup_state("compare the first two")) == FollowUp(
-        "compare", (first, second)
-    )
-    assert resolve_followup(_followup_state("Compare 1 and 2 please")) == FollowUp(
-        "compare", (first, second)
-    )
-    assert resolve_followup(_followup_state("compare the second and the third")) == FollowUp(
-        "compare", (second, third)
-    )
-    assert resolve_followup(_followup_state("tell me more about the second one")) == FollowUp(
-        "details", (second,)
-    )
-    # A bare positional reference inspects that product (US4 details turn).
-    assert resolve_followup(_followup_state("the second one")) == FollowUp("details", (second,))
-    # "that one" resolves to the LAST selected id (prescribed semantics),
-    # falling back to ranked[0] when nothing was selected.
-    assert resolve_followup(_followup_state("THAT ONE")) == FollowUp("details", (third,))
-    assert resolve_followup(
-        _followup_state("that one", selected=[], ranked=[first, second, third])
-    ) == FollowUp("details", (first,))
-    assert resolve_followup(_followup_state("add the first one to my cart")) == FollowUp(
-        "add_to_cart", (first,)
-    )
-    assert resolve_followup(_followup_state("add that one to my cart")) == FollowUp(
-        "add_to_cart", (third,)
-    )
-    assert resolve_followup(_followup_state("remove the first one from my cart")) == FollowUp(
-        "remove_from_cart", (first,)
-    )
-    assert resolve_followup(_followup_state("what's in my cart?")) == FollowUp("cart_view")
-    assert resolve_followup(_followup_state("show my cart")) == FollowUp("cart_view")
-
-    # ui_action path: payload ids win; the grid's payload-less compare falls
-    # back to the presented top two; unknown payload ids fall back to the
-    # last selected product.
-    assert resolve_followup(
-        _followup_state(
-            "", action={"type": "choose", "label": "x", "payload": {"productId": second}}
-        )
-    ) == FollowUp("details", (second,))
-    assert resolve_followup(
-        _followup_state("", action={"type": "compare", "label": "Compare", "payload": {}})
-    ) == FollowUp("compare", (first, second))
-    assert resolve_followup(
-        _followup_state(
-            "", action={"type": "details", "label": "Details", "payload": {"productId": "nope"}}
-        )
-    ) == FollowUp("details", (third,))
-
-    # Unresolvable targets: a clean disclosure, never an error.
-    assert resolve_followup(
-        {"pending_user_text": "compare the first two", "pending_ui_action": None}
-    ) == FollowUp("disclosure", (), NO_PRODUCTS_DISCLOSURE)
-
-    # Normal pipeline: full requests and chatter never fast-path; bare
-    # positional references on an empty session are just prose.
-    assert resolve_followup(_followup_state(FLIGHTS_MESSAGE)) is None
-    assert resolve_followup(_followup_state("hello there")) is None
-    assert resolve_followup(_followup_state("")) is None
-    assert (
-        resolve_followup(
-            {"pending_user_text": "my first pair of headphones", "pending_ui_action": None}
-        )
-        is None
-    )
 
 
 async def test_us4_compare_first_two_produces_comparison_table() -> None:
@@ -768,8 +679,9 @@ async def test_us4_preference_rerank_flows_through_normal_pipeline() -> None:
 
 
 async def test_us4_followup_turn_makes_exactly_one_llm_call(fake_llm_factory) -> None:
-    """Follow-up turns skip the intent, plan-selection, and narration LLM
-    calls (deterministic assembly); only the weights call touches a model."""
+    """Follow-up turns skip the intent and narration LLM calls (deterministic
+    resolution and assembly, plan included); only the weights call touches a
+    model."""
     session = "us4-onecall-001"
     _state1, _config = _run_graph(session)
     fake = fake_llm_factory([])  # unscripted calls fall back to default handlers
@@ -846,12 +758,12 @@ async def test_us5_single_validation_failure_recovers_on_retry(fake_llm_factory)
     assert state["plan"]["root"]["type"] == "product_grid"
     assert [kind for kind, _data in events if kind == "message_delta"]
     # IntentExtraction consumed the scripted pair (invalid + valid retry);
-    # every later call fell back to the default mock handlers.
+    # every later call fell back to the default mock handlers. Plan assembly
+    # makes no model call (code-owned since the review fix).
     assert fake.calls == [
         ("IntentExtraction", 0),
         ("IntentExtraction", 1),
         ("PreferenceWeights", None),
-        ("PlanSelection", None),
         ("Narration", None),
     ]
 
@@ -870,3 +782,82 @@ async def test_us5_identical_ranking_and_text_across_sessions_and_runs() -> None
     runs_b = [await signature(f"us5-det-b{run}") for run in range(1, 4)]
     assert len({repr(signature_value) for signature_value in runs_a + runs_b}) == 1
     assert runs_a[0][0][0][0] == EXPECTED_TOP3[0]
+
+
+# ---------------------------------------------------------------------------
+# US5b: the native -> JSON-mode downgrade trigger is narrowed (review fix):
+# ONLY provider request-contract rejections (status 400/404/422) permanently
+# downgrade a model; transient failures re-raise untouched.
+# ---------------------------------------------------------------------------
+
+
+class _ProviderError(Exception):
+    """Provider-style request error carrying an HTTP ``status_code``."""
+
+    def __init__(self, status_code: int | None) -> None:
+        super().__init__(f"provider error (status={status_code})")
+        self.status_code = status_code
+
+
+class _NativeRejectingLLM:
+    """Fake LLM whose native structured call raises; JSON fallback works.
+
+    Same consumer surface ``call_structured`` uses: ``with_structured_output``
+    returns a runnable whose ``invoke`` raises *error*; plain ``invoke``
+    (the JSON-mode path) returns a valid PreferenceWeights document.
+    """
+
+    def __init__(self, model_name: str, error: Exception) -> None:
+        self.model_name = model_name
+        self._error = error
+        self.json_invocations = 0
+
+    def with_structured_output(self, _schema: type) -> object:
+        outer = self
+
+        class _Bound:
+            def invoke(self, _messages: object) -> object:
+                raise outer._error
+
+        return _Bound()
+
+    def invoke(self, _messages: object) -> str:
+        self.json_invocations += 1
+        return '{"anc": 1.0, "comfort": 0.8, "battery": 0.0, "sound": 0.0, "value": 0.0}'
+
+
+def test_native_contract_rejection_400_downgrades_to_json_mode() -> None:
+    """status_code=400 -> permanent JSON-mode downgrade, turn still succeeds."""
+    llm = _NativeRejectingLLM("fake-contract-reject-400", _ProviderError(400))
+    result = call_structured(llm, PreferenceWeights, "weights please")
+    assert result.anc == 1.0
+    assert llm.json_invocations == 1
+    assert "fake-contract-reject-400" in _JSON_MODE_MODELS
+
+
+def test_native_contract_rejection_404_and_422_downgrade_too() -> None:
+    """404/422 are the other in-contract rejections (unknown route / schema)."""
+    for status in (404, 422):
+        model_name = f"fake-contract-reject-{status}"
+        llm = _NativeRejectingLLM(model_name, _ProviderError(status))
+        result = call_structured(llm, PreferenceWeights, "weights please")
+        assert result.comfort == 0.8
+        assert model_name in _JSON_MODE_MODELS
+
+
+def test_transient_native_failure_reraises_without_downgrade() -> None:
+    """5xx -> original exception re-raised, model NOT downgraded to JSON."""
+    llm = _NativeRejectingLLM("fake-transient-503", _ProviderError(503))
+    with pytest.raises(_ProviderError):
+        call_structured(llm, PreferenceWeights, "weights please")
+    assert llm.json_invocations == 0
+    assert "fake-transient-503" not in _JSON_MODE_MODELS
+
+
+def test_exception_without_status_code_reraises_without_downgrade() -> None:
+    """Plain timeouts/connection errors carry no status_code: re-raise."""
+    llm = _NativeRejectingLLM("fake-timeout", TimeoutError("read timed out"))
+    with pytest.raises(TimeoutError):
+        call_structured(llm, PreferenceWeights, "weights please")
+    assert llm.json_invocations == 0
+    assert "fake-timeout" not in _JSON_MODE_MODELS

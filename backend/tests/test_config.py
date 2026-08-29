@@ -3,12 +3,15 @@
 ``app.config`` is the constitution-II doorway: model, base URL, and API key
 come exclusively from the environment; ``LLM_MODE=mock`` (the default) must
 let everything run with no credentials, and ``LLM_MODE=real`` without them
-must fail fast at startup — never mid-conversation.
+must fail fast at startup — never mid-conversation. The review fix adds
+enum validation for ``LLM_MODE`` / ``LLM_API_STYLE`` (a typo must fail at
+settings construction) and the CORS origin allowlist parsing.
 """
 
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from app.config import Settings, get_settings, require_real_config
 
@@ -20,6 +23,7 @@ _ENV_KEYS: tuple[str, ...] = (
     "OPENCODE_BASE_URL",
     "OPENCODE_API_KEY",
     "LLM_API_STYLE",
+    "ALLOWED_ORIGINS",
 )
 
 
@@ -76,6 +80,56 @@ def test_require_real_config_passes_when_both_set(clean_env) -> None:
     )
     assert settings.is_mock is False
     assert require_real_config(settings) is None
+
+
+def test_typoed_llm_mode_is_rejected_naming_valid_values(clean_env) -> None:
+    """A typo'd mode ('rel') fails at construction, naming 'mock'/'real'."""
+    with pytest.raises(ValidationError) as excinfo:
+        Settings(LLM_MODE="rel", _env_file=None)
+    message = str(excinfo.value)
+    assert "LLM_MODE" in message
+    assert "mock" in message
+    assert "real" in message
+
+
+def test_llm_mode_is_case_insensitive_and_normalized(clean_env) -> None:
+    """'REAL' is accepted (case-insensitive) and stored normalized."""
+    settings = Settings(
+        LLM_MODE="REAL",
+        LLM_MODEL="test-model",
+        OPENCODE_API_KEY="test-key",
+        _env_file=None,
+    )
+    assert settings.LLM_MODE == "real"
+    assert settings.is_mock is False
+    assert require_real_config(settings) is None
+
+
+def test_typoed_llm_api_style_is_rejected(clean_env) -> None:
+    """Only 'auto' / 'responses' are valid API styles."""
+    with pytest.raises(ValidationError) as excinfo:
+        Settings(LLM_API_STYLE="chat_completions", _env_file=None)
+    message = str(excinfo.value)
+    assert "LLM_API_STYLE" in message
+    assert "auto" in message
+    assert "responses" in message
+    # The valid spellings still construct (case-insensitive, normalized).
+    assert Settings(LLM_API_STYLE=" Responses ", _env_file=None).LLM_API_STYLE == "responses"
+
+
+def test_allowed_origins_parsing_and_default(clean_env) -> None:
+    """Comma-split, whitespace-stripped, empties dropped; sane dev default."""
+    settings = Settings(ALLOWED_ORIGINS=" http://a.example , http://b.example ,,  ", _env_file=None)
+    assert settings.allowed_origins == ["http://a.example", "http://b.example"]
+    assert Settings(_env_file=None).allowed_origins == [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    # A single origin with no comma still parses; empty string -> empty list.
+    assert Settings(ALLOWED_ORIGINS="http://solo.example", _env_file=None).allowed_origins == [
+        "http://solo.example"
+    ]
+    assert Settings(ALLOWED_ORIGINS="", _env_file=None).allowed_origins == []
 
 
 async def test_health_never_echoes_secrets(client) -> None:

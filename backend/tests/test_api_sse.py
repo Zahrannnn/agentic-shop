@@ -2,8 +2,10 @@
 
 Asserts the wire behavior the future frontend depends on: exact status-stage
 order, one validated ``ui_update``, a single ``turn_end`` terminator, the
-FR-016 busy guard (real 409 before the stream starts), FastAPI 422
-validation, and byte-level ``event:/data:`` frame formatting.
+FR-016 busy guard (real 409 before the stream starts), the additive
+``resume`` flag (404 ``unknown_session`` before the busy guard — review
+fix), the CORS allowlist (review fix), FastAPI 422 validation, and
+byte-level ``event:/data:`` frame formatting.
 """
 
 from __future__ import annotations
@@ -135,6 +137,128 @@ async def test_schema_violating_bodies_return_422(client) -> None:
     ):
         response = await client.post("/api/chat", json=body)
         assert response.status_code == 422, body
+
+
+# ---------------------------------------------------------------------------
+# Resume flag: additive 404 unknown_session (review fix — restart story)
+# ---------------------------------------------------------------------------
+
+
+async def test_resume_false_fresh_session_proceeds_and_registers(client) -> None:
+    """A brand-new session with resume=false always streams and registers."""
+    import app.api.routes as routes
+
+    session_id = "resume-fresh-0001"
+    status, events = await _post_stream(
+        client, {"session_id": session_id, "message": FLIGHTS_MESSAGE, "resume": False}
+    )
+    assert status == 200
+    assert events[-1][0] == "turn_end"
+    assert session_id in routes._live_sessions
+
+
+async def test_resume_true_on_known_session_proceeds(client) -> None:
+    """Same session: start without resume, reattach with resume=true."""
+    session_id = "resume-cycle-0001"
+    status, first_events = await _post_stream(
+        client, {"session_id": session_id, "message": FLIGHTS_MESSAGE, "resume": False}
+    )
+    assert status == 200
+    assert first_events[-1][0] == "turn_end"
+
+    status, second_events = await _post_stream(
+        client, {"session_id": session_id, "message": "compare the first two", "resume": True}
+    )
+    assert status == 200
+    assert second_events[-1][0] == "turn_end"
+    plan = next(data for name, data in second_events if name == "ui_update")
+    assert plan["root"]["type"] == "comparison_table"
+
+
+async def test_resume_true_on_unknown_session_returns_404(client) -> None:
+    """resume=true for a session this process never saw -> 404, no turn."""
+    import app.api.routes as routes
+
+    session_id = "resume-unkn-0001"
+    response = await client.post(
+        "/api/chat", json={"session_id": session_id, "message": FLIGHTS_MESSAGE, "resume": True}
+    )
+    assert response.status_code == 404
+    assert response.json() == {"detail": "unknown_session"}
+    # The 404 fired BEFORE any turn started: nothing registered, nothing busy.
+    assert session_id not in routes._live_sessions
+    assert session_id not in routes._in_flight
+
+    # The contract's restart story: the client starts fresh WITHOUT the flag.
+    status, events = await _post_stream(
+        client, {"session_id": session_id, "message": FLIGHTS_MESSAGE, "resume": False}
+    )
+    assert status == 200
+    assert events[-1][0] == "turn_end"
+
+
+async def test_resume_404_takes_precedence_over_busy_409(client) -> None:
+    """Unknown + somehow-in-flight: the 404 check runs before the busy guard."""
+    import app.api.routes as routes
+
+    ghost = "ghost-resume-01"
+    routes._in_flight.add(ghost)  # busy, but never registered as live
+    try:
+        response = await client.post(
+            "/api/chat", json={"session_id": ghost, "message": "hello there", "resume": True}
+        )
+        assert response.status_code == 404
+        assert response.json() == {"detail": "unknown_session"}
+
+        # Without the flag the same request reaches the busy guard instead.
+        response = await client.post(
+            "/api/chat", json={"session_id": ghost, "message": "hello there"}
+        )
+        assert response.status_code == 409
+        assert response.json() == {"detail": "turn_in_flight"}
+    finally:
+        routes._in_flight.discard(ghost)
+
+
+# ---------------------------------------------------------------------------
+# CORS allowlist (review fix): the Next.js frontend is a browser client
+# ---------------------------------------------------------------------------
+
+
+async def test_cors_preflight_allows_configured_origin(client) -> None:
+    response = await client.options(
+        "/api/chat",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+
+async def test_cors_preflight_rejects_unknown_origin(client) -> None:
+    response = await client.options(
+        "/api/chat",
+        headers={
+            "Origin": "http://evil.example",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert response.status_code == 400  # starlette: "Disallowed CORS origin"
+    assert "access-control-allow-origin" not in response.headers
+
+
+async def test_cors_actual_post_from_allowed_origin_works(client) -> None:
+    response = await client.post(
+        "/api/chat",
+        json={"session_id": "cors-post-0001", "message": FLIGHTS_MESSAGE},
+        headers={"Origin": "http://127.0.0.1:3000"},
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:3000"
 
 
 async def test_sse_frames_are_well_formed(client) -> None:
