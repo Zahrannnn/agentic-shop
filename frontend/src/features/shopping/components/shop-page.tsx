@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
+import { Button } from "@/components/ui/button";
 import { SESSION_STORAGE_KEY } from "../store";
 import {
   useAgentTurn,
@@ -29,6 +30,24 @@ import { TurnComposer } from "./turn-composer";
  */
 
 const subscribeNoop = () => () => {};
+
+/** One-tap starters (PRODUCT voice: concrete needs, not marketing). */
+const SUGGESTIONS: { label: string; prompt: string }[] = [
+  {
+    label: "Flights headphones",
+    prompt:
+      "Help me find the best headphones for long flights under $200. Noise cancellation and comfort matter most.",
+  },
+  {
+    label: "Budget noise cancelling",
+    prompt: "Best noise cancelling headphones under $100.",
+  },
+  {
+    label: "Lightweight over-ears",
+    prompt:
+      "Comfortable lightweight over-ear headphones under $250 for long listening sessions.",
+  },
+];
 
 function hasRehydratedSession(): boolean {
   if (typeof window === "undefined") {
@@ -118,9 +137,29 @@ export function ShopPage() {
       <main className="w-full flex-1 px-6 py-8">
         <div role="log" aria-label="Conversation transcript">
           {turns.length === 0 ? (
-            <p className="text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
-              What are you looking for?
-            </p>
+            <div data-testid="empty-state" className="max-w-prose space-y-5 py-10">
+              <h1 className="text-2xl font-semibold tracking-tight">
+                What are you looking for?
+              </h1>
+              <p className="text-[15px] leading-[1.6] text-muted-foreground">
+                Describe what you need — budget, use case, what matters most.
+                The agent searches the catalog, compares the field, and commits
+                to a pick with its reasons.
+              </p>
+              <div className="flex flex-wrap gap-2" data-testid="suggestion-chips">
+                {SUGGESTIONS.map((suggestion) => (
+                  <Button
+                    key={suggestion.label}
+                    variant="outline"
+                    size="sm"
+                    data-testid="suggestion-chip"
+                    onClick={() => handleSendText(suggestion.prompt)}
+                  >
+                    {suggestion.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
           ) : (
             <ol className="space-y-8">
               {turns.map((turn, index) => (

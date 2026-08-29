@@ -243,6 +243,24 @@ describe("ShopPage transcript", () => {
 });
 
 describe("ShopPage thinking states", () => {
+  it("offers suggestion chips in the empty state and sends the prompt on click", () => {
+    const send = vi.fn(
+      async (): Promise<SendOutcomeLike> => ({ kind: "started" }),
+    );
+    setHook({ send });
+    render(<ShopPage />);
+
+    const chips = screen.getAllByTestId("suggestion-chip");
+    expect(chips).toHaveLength(3);
+
+    fireEvent.click(chips[0]);
+    expect(send).toHaveBeenCalledWith({
+      message:
+        "Help me find the best headphones for long flights under $200. Noise cancellation and comfort matter most.",
+      resume: false,
+    });
+  });
+
   it("scrolls the newest turn into view as turns arrive", () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
