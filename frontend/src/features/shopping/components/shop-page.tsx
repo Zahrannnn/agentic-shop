@@ -103,13 +103,13 @@ export function ShopPage() {
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="border-b">
-        <div className="mx-auto flex w-full max-w-2xl items-center justify-between px-6 py-4">
+        <div className="flex w-full items-center justify-between px-6 py-4">
           <p className="text-xl font-semibold tracking-tight">agentic-shop</p>
           <HealthBadge />
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-8">
+      <main className="w-full flex-1 px-6 py-8">
         <div role="log" aria-label="Conversation transcript">
           {turns.length === 0 ? (
             <p className="text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
@@ -133,7 +133,7 @@ export function ShopPage() {
       </main>
 
       <footer className="border-t">
-        <div className="mx-auto w-full max-w-2xl px-6 py-4">
+        <div className="w-full px-6 py-4">
           {expiredNotice ? (
             <div
               data-testid="session-expired-notice"
