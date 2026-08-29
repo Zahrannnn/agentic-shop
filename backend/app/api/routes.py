@@ -10,11 +10,20 @@ successful turn. Exactly one terminal frame is ever sent: an in-stream
 ``StructuredOutputError`` or a node-emitted ``error`` payload replaces
 ``turn_end`` and nothing follows it.
 
-Concurrency (FR-016): at most one turn may be in flight per ``session_id``.
-A second concurrent POST for the same session is rejected with a real
-**409** *before* the stream starts (``{"detail": "turn_in_flight"}``); other
-sessions are unaffected. The in-flight registration happens in the endpoint
-body; the generator's ``finally`` always releases it.
+Concurrency (FR-016): at most one turn may be in flight per ``session_id``;
+a second concurrent POST for the same session is rejected with **409**
+before the stream starts (``{"detail": "turn_in_flight"}``); other sessions
+are unaffected. The in-flight registration happens in the endpoint body, the
+generator's ``finally`` releases it.
+
+Sessions (``resume`` flag, architecture-review fix): :data:`_live_sessions`
+records every session that started a turn in THIS process. A request with
+``resume=true`` for a session outside that set is rejected with **404**
+(``{"detail": "unknown_session"}``) BEFORE the busy guard — sessions are
+in-memory, so after a restart the client's reattach attempt 404s and it MUST
+start a fresh session (retry without ``resume``). ``resume=false`` always
+proceeds and registers the session; entries are never removed (a restart
+wipes the process set — exactly the contract's restart story).
 """
 
 from __future__ import annotations
@@ -48,6 +57,12 @@ router = APIRouter()
 #: stream generator's ``finally``.
 _in_flight: set[str] = set()
 _in_flight_lock = asyncio.Lock()
+
+#: Sessions this process has seen start a turn (``resume`` support). Mutated
+#: only under :data:`_in_flight_lock`; never emptied except by a process
+#: restart — which is exactly the semantics the 404 contract describes.
+_live_sessions: set[str] = set()
+_live_sessions_lock = _in_flight_lock  # same critical section guards both sets
 
 _STRUCTURED_OUTPUT_ERROR_MESSAGE = "The model returned an invalid response twice. Please try again."
 _INTERNAL_ERROR_MESSAGE = "Something went wrong on our side. Please try again."
@@ -153,12 +168,21 @@ async def sse_generator(
 
 @router.post("/api/chat")
 async def chat(request: ChatRequest) -> StreamingResponse:
-    """Start one streamed turn for ``session_id`` (FR-016 busy guard included)."""
+    """Start one streamed turn for ``session_id``.
+
+    Guard order under one lock (architecture-review fix): ``resume=true``
+    for a session this process never registered -> **404 unknown_session**
+    first; then the FR-016 busy guard -> **409 turn_in_flight**; otherwise
+    the turn starts and the session is registered as live.
+    """
     session_id = request.session_id
-    async with _in_flight_lock:
+    async with _live_sessions_lock:
+        if request.resume and session_id not in _live_sessions:
+            raise HTTPException(status_code=404, detail="unknown_session")
         if session_id in _in_flight:
             raise HTTPException(status_code=409, detail="turn_in_flight")
         _in_flight.add(session_id)
+        _live_sessions.add(session_id)
     graph_input = {
         "pending_user_text": request.message,
         "pending_ui_action": request.ui_action.model_dump() if request.ui_action else None,

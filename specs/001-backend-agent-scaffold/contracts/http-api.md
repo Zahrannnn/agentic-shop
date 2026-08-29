@@ -30,7 +30,8 @@ Request body (`ChatRequest`):
 {
   "session_id": "b1e0c8de-2f6a-4c6f-9a4d-2f1e0b9c8d77",
   "message": "Help me find the best headphones for long flights under $200.",
-  "ui_action": null
+  "ui_action": null,
+  "resume": false
 }
 ```
 
@@ -39,16 +40,30 @@ Request body (`ChatRequest`):
 | `session_id` | string | client-generated, 8–64 chars; scopes the conversation |
 | `message` | string | 1–2000 chars; omit/empty only when `ui_action` present |
 | `ui_action` | object \| null | `{type, label, payload}` echoed from a rendered plan component |
+| `resume` | boolean | default `false`. Set `true` when the client believes the session already exists (e.g. restoring a conversation after a page reload); the server answers `404` if it does not know the session |
 
 Responses:
 
 - **200** — SSE stream (below).
+- **404 Not Found** — `resume: true` for a session the server does not know
+  (process restarted or never seen). Body: `{"detail": "unknown_session"}`.
+  The client MUST restart the conversation without `resume`. Requests with
+  `resume: false` (the default) always proceed and register the session.
 - **409 Conflict** — a turn is already in flight for this `session_id`
   (FR-016). Body: `{"detail": "turn_in_flight"}`. Other sessions unaffected.
-- **404 Not Found** — `resume` addressed a session that no longer exists
-  (process restarted). Body: `{"detail": "unknown_session"}`.
+  Takes precedence *after* the 404 check (an unknown-and-busy session answers
+  404 when `resume: true`, 409 otherwise).
 - **422 Unprocessable Entity** — schema-violating request body (FastAPI
   validation).
+
+## Cross-origin (browser clients)
+
+The API sends permissive-enough CORS headers for browser frontends: allowed
+origins are configured server-side via `ALLOWED_ORIGINS` (comma-separated;
+defaults cover the Next.js dev server on `localhost:3000` / `127.0.0.1:3000`),
+with methods `GET, POST, OPTIONS` and headers `Content-Type, Authorization`,
+credentials disabled. Alternatively a client may proxy all calls through its
+own server routes and ignore CORS entirely.
 
 ## SSE stream (success)
 

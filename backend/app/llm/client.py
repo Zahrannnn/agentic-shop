@@ -300,23 +300,10 @@ def _narration_handler(text: str, context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _plan_selection_handler(text: str, context: dict[str, Any]) -> dict[str, Any]:
-    """Component choice from context, defaulting to a product grid."""
-    _ = text  # plan selection is driven by the context block only
-    data: dict[str, Any] = {
-        "component": context.get("suggested_component") or "product_grid",
-        "title": context.get("title") or "Best matches",
-    }
-    if "product_ids" in context:
-        data["product_ids"] = list(context["product_ids"])
-    return data
-
-
 _DEFAULT_HANDLERS: dict[str, MockHandler] = {
     "IntentExtraction": _intent_extraction_handler,
     "PreferenceWeights": _preference_weights_handler,
     "Narration": _narration_handler,
-    "PlanSelection": _plan_selection_handler,
 }
 
 #: Module-level per-schema handler overrides (first consulted after the
@@ -416,14 +403,17 @@ def call_structured[ModelT: BaseModel](
     """Invoke *llm* for *schema* with validate -> retry once -> fail clean.
 
     Native ``with_structured_output`` is tried first. Some gateway models only
-    expose the Responses API or reject strict JSON schemas; when the native
-    call fails at request time the model is remembered in
+    expose the Responses API or reject strict JSON schemas; when the provider
+    rejects the native *request contract* (an exception carrying an HTTP
+    ``status_code`` of 400/404/422) the model is remembered in
     :data:`_JSON_MODE_MODELS` and subsequent calls use schema-in-prompt JSON
-    mode (:func:`_call_structured_json`) instead. Either way, outputs are
-    Pydantic-validated (the safety net), a failed validation is retried
-    EXACTLY once with the validation error fed back, and a second failure
-    raises :class:`StructuredOutputError` for the graph to map to one
-    ``error`` event.
+    mode (:func:`_call_structured_json`) instead. Any other request-time
+    failure (timeouts, 5xx, connection errors) is re-raised unchanged — a
+    transient outage must not permanently downgrade the model to JSON mode.
+    Either way, outputs are Pydantic-validated (the safety net), a failed
+    validation is retried EXACTLY once with the validation error fed back, and
+    a second failure raises :class:`StructuredOutputError` for the graph to
+    map to one ``error`` event.
     """
     base_messages = _as_message_list(messages)
     model_key = str(getattr(llm, "model_name", "") or id(llm))
@@ -432,9 +422,11 @@ def call_structured[ModelT: BaseModel](
     structured = llm.with_structured_output(schema)
     try:
         result = structured.invoke(base_messages)
-    except Exception:  # noqa: BLE001 — any request-time failure -> JSON mode
-        _JSON_MODE_MODELS.add(model_key)
-        return _call_structured_json(llm, schema, base_messages)
+    except Exception as exc:  # noqa: BLE001 — narrowed below, never silenced
+        if _is_request_contract_rejection(exc):
+            _JSON_MODE_MODELS.add(model_key)
+            return _call_structured_json(llm, schema, base_messages)
+        raise
     try:
         return schema.model_validate(result)
     except ValidationError as first_error:
@@ -452,6 +444,25 @@ def call_structured[ModelT: BaseModel](
             return schema.model_validate(retried)
         except ValidationError as second_error:
             raise StructuredOutputError(str(second_error)) from second_error
+
+
+#: HTTP status codes that mean "this provider endpoint does not honour the
+#: native structured-output request contract" (bad request / unknown route /
+#: unprocessable schema) — the only failures that trigger the permanent JSON
+#: mode downgrade.
+_REQUEST_CONTRACT_STATUS_CODES: frozenset[int] = frozenset({400, 404, 422})
+
+
+def _is_request_contract_rejection(exc: BaseException) -> bool:
+    """True when *exc* looks like a provider rejection of the request itself.
+
+    Provider SDKs attach the HTTP status as ``status_code`` on their request
+    errors; anything without an int status in
+    :data:`_REQUEST_CONTRACT_STATUS_CODES` (timeouts, 5xx, connection drops,
+    SDK quirks) is NOT a contract rejection.
+    """
+    status = getattr(exc, "status_code", None)
+    return isinstance(status, int) and status in _REQUEST_CONTRACT_STATUS_CODES
 
 
 def _result_text(result: Any) -> str:
@@ -515,8 +526,9 @@ def _call_structured_json[ModelT: BaseModel](
     raise StructuredOutputError(str(last_error))
 
 
-#: Models that failed their native structured-output contract at request time
-#: (e.g. Responses-only gateway models). Cleared by :func:`reset_llm_cache`.
+#: Models whose native structured-output request contract was rejected by the
+#: provider (HTTP 400/404/422 on the native call — e.g. Responses-only gateway
+#: models). Cleared by :func:`reset_llm_cache`.
 _JSON_MODE_MODELS: set[str] = set()
 
 

@@ -6,28 +6,16 @@ deterministic mock handlers in ``app.llm.client`` one-to-one, so the whole
 pipeline is exercisable keyless and offline (research R5).
 
 The LLM *configures* — it never free-writes products, orders, or plans
-(DECISIONS.md D3): weights feed the pure scorer, narration quotes
-code-generated highlights, and ``PlanSelection`` only picks which validated
-component the ``ui_plan`` node assembles deterministically.
+(DECISIONS.md D3): weights feed the pure scorer and narration quotes
+code-generated highlights. UI plans are assembled entirely by code
+(``app.graph.nodes`` + ``app.graph.followups``); the model never chooses plan
+structure (architecture-review fix: the PlanSelection call was removed as
+dead weight — only its constant title was ever used).
 """
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field
-
-#: Component types the plan node can assemble today (mirrors
-#: ``app.dsl.models.ComponentType``; kept literal here so the graph schema
-#: stays independent of the DSL module).
-ComponentName = Literal[
-    "product_grid",
-    "preference_picker",
-    "comparison_table",
-    "product_details",
-    "cart_view",
-    "text_block",
-]
 
 
 class IntentExtraction(BaseModel):
@@ -80,14 +68,3 @@ class Narration(BaseModel):
     intro: str = Field(min_length=1)
     per_product: list[NarrationItem] = Field(default_factory=list)
     outro: str = Field(min_length=1)
-
-
-class PlanSelection(BaseModel):
-    """The plan node's *choice* of component + title; the plan document itself
-    is assembled deterministically from ranked data (never free-written)."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    component: ComponentName = "product_grid"
-    title: str = "Best matches"
-    product_ids: list[str] = Field(default_factory=list)

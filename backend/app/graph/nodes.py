@@ -20,12 +20,14 @@ Node contract
 * No prints, no clock, no randomness: identical inputs produce identical
   emissions (principle III).
 
-US4 follow-up turns (``resolve_followup``) are resolved deterministically in
-the intent node BEFORE any model call, mirroring the chip fast-path: positional
-and demonstrative references ("compare the first two", "add that one to my
-cart") resolve against the session's presented products, and the matched turn
-skips the intent, plan-selection, and narration LLM calls (weights still flow
-through the normal pipeline so ``ranked`` stays fresh).
+US4 follow-up turns are resolved deterministically in the intent node BEFORE
+any model call, mirroring the chip fast-path: positional and demonstrative
+references ("compare the first two", "add that one to my cart") resolve
+against the session's presented products, and the matched turn skips the
+intent and narration LLM calls (weights still flow through the normal
+pipeline so ``ranked`` stays fresh). The resolver itself lives in
+:mod:`app.graph.followups` (pure, unit-testable); this module re-exports its
+public names.
 
 The catalog is NOT checkpointed state; nodes read it via :func:`get_catalog`,
 a process-wide lazy singleton over ``app.catalog.loader.load_catalog``.
@@ -37,7 +39,6 @@ import json
 import math
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
@@ -60,7 +61,17 @@ from app.dsl.models import (
     UIPlan,
 )
 from app.dsl.validate import PlanValidationError, serialize_plan, validate_plan
-from app.graph.schemas import IntentExtraction, Narration, PlanSelection, PreferenceWeights
+from app.graph.followups import (
+    COMPARISON_ATTRIBUTES,
+    FOLLOWUP_ACTION_TYPES,
+    NO_PRODUCTS_DISCLOSURE,
+    TOP_N,
+    FollowUp,
+    catalog_id_set,
+    ranked_ids,
+    resolve_followup,
+)
+from app.graph.schemas import IntentExtraction, Narration, PreferenceWeights
 from app.graph.state import ShoppingState
 from app.llm.client import CONTEXT_CLOSE, CONTEXT_OPEN, call_structured, get_llm
 from app.ranking.scorer import SCORABLE_ATTRIBUTES, ScoredProduct, score_products
@@ -72,9 +83,10 @@ __all__ = [
     "ASK_QUESTION",
     "COMPARISON_ATTRIBUTES",
     "DEFAULT_BUDGET_USD",
-    "FollowUp",
     "FOLLOWUP_ACTION_TYPES",
+    "FollowUp",
     "NO_PRODUCTS_DISCLOSURE",
+    "PLAN_TITLE",
     "clarify_decision",
     "clarify_gate",
     "get_catalog",
@@ -90,9 +102,6 @@ __all__ = [
 
 #: Custom stream payload: ``(kind, data)`` translated 1:1 into an SSE frame.
 StreamPayload = tuple[str, Any]
-
-#: How many ranked products the plan presents and the narration covers.
-TOP_N: int = 3
 
 #: How many candidates the research node digests (bounded work at 28 items).
 RESEARCH_TOP_N: int = 6
@@ -162,14 +171,6 @@ _NARRATION_SYSTEM_PROMPT = (
     "intro, one sentence per recommended product that restates ONLY the "
     "highlights provided for that product, and a one-sentence closing "
     "question. Never invent product facts, prices, or numbers."
-)
-
-_PLAN_SYSTEM_PROMPT = (
-    "You choose which UI component should render for this turn: a product "
-    "grid to present ranked recommendations, a comparison table for side-by-side "
-    "views, or a text block for disclosures. You also provide a short human "
-    "title. You may only reference product ids from the provided list — the "
-    "plan document itself is assembled by the system."
 )
 
 
@@ -347,267 +348,9 @@ def _extract_attribute_constraints(text: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# US4: deterministic follow-up resolution (fast paths BEFORE any LLM call)
+# US4: deterministic follow-up resolution lives in app.graph.followups
+# (re-exported above); the intent node resolves follow-ups BEFORE any LLM call.
 # ---------------------------------------------------------------------------
-
-
-#: UI-action types a follow-up turn resolves without any model call. A
-#: ``choose`` action (the comparison table's pick button) maps to a
-#: ``details`` turn: the shopper singled one product out, and the natural
-#: next step is inspecting it.
-FOLLOWUP_ACTION_TYPES: frozenset[str] = frozenset(
-    {"compare", "details", "add_to_cart", "remove_from_cart", "choose"}
-)
-
-#: Attributes of every follow-up ``comparison_table`` (contracts/ui-dsl.md
-#: and the ``comparison-two.json`` fixture agree on this list).
-COMPARISON_ATTRIBUTES: tuple[str, ...] = (
-    "price_usd",
-    "battery_hours",
-    "weight_g",
-    "anc_type",
-    "comfort",
-)
-
-#: Disclosure when a follow-up references products that were never presented
-#: (invalid/missing targets end the turn cleanly — no error frame, US4).
-NO_PRODUCTS_DISCLOSURE: str = "We haven't picked products yet — ask for a recommendation first."
-
-#: Maximum targets of one comparison (DSL bound: 2-3 productIds).
-MAX_COMPARE: int = 3
-
-#: Follow-up turn kinds, as stored in ``state["followup"]["kind"]``.
-FOLLOWUP_KINDS = (
-    "compare",
-    "details",
-    "add_to_cart",
-    "remove_from_cart",
-    "cart_view",
-    "disclosure",
-)
-
-
-@dataclass(frozen=True)
-class FollowUp:
-    """One deterministically resolved follow-up turn (US4).
-
-    ``kind`` is one of :data:`FOLLOWUP_KINDS`; ``product_ids`` carries the
-    resolved targets (empty for ``cart_view``/``disclosure``); ``disclosure``
-    is set only for the ``disclosure`` kind, whose turn ends cleanly with a
-    text_block plan instead of an error frame.
-    """
-
-    kind: str
-    product_ids: tuple[str, ...] = ()
-    disclosure: str | None = None
-
-    def to_state(self) -> dict[str, Any]:
-        """Plain-dict form stored under ``state["followup"]``."""
-        return {
-            "kind": self.kind,
-            "product_ids": list(self.product_ids),
-            "disclosure": self.disclosure,
-        }
-
-
-_CART_VIEW_RE = re.compile(
-    r"\bwhat(?:['’]s| is)\s+in\s+(?:my |the )cart\b"
-    r"|\b(?:show|view|open|see)\s+(?:my |the )cart\b",
-    re.IGNORECASE,
-)
-_REMOVE_FROM_CART_RE = re.compile(r"\bremove\b[\s\S]*\bfrom\s+(?:my |the )?cart\b", re.IGNORECASE)
-_ADD_TO_CART_RE = re.compile(r"\badd\b[\s\S]*\bto\s+(?:my |the )?cart\b", re.IGNORECASE)
-_COMPARE_RE = re.compile(r"\bcompare\b", re.IGNORECASE)
-# Only the explicit inspect phrases — a bare "more about" would false-match
-# preference sentences like "I care more about comfort than sound quality".
-_DETAILS_RE = re.compile(r"\btell me more about\b|\bdetails\b", re.IGNORECASE)
-_DEMONSTRATIVE_RE = re.compile(r"\b(?:that|this)\s+one\b", re.IGNORECASE)
-
-#: Ordinal words / bare digits -> 0-based position in the presented list.
-_POSITION_PATTERNS: tuple[tuple[re.Pattern[str], int], ...] = (
-    (re.compile(r"\bfirst\b", re.IGNORECASE), 0),
-    (re.compile(r"\bsecond\b", re.IGNORECASE), 1),
-    (re.compile(r"\bthird\b", re.IGNORECASE), 2),
-    (re.compile(r"\b1\b"), 0),
-    (re.compile(r"\b2\b"), 1),
-    (re.compile(r"\b3\b"), 2),
-)
-
-
-def _ranked_ids(state: ShoppingState) -> list[str]:
-    """Checkpointed ranking as plain ids (tolerates dicts after a restore)."""
-    ids: list[str] = []
-    for scored in state.get("ranked") or []:
-        product_id = (
-            scored.get("product_id")
-            if isinstance(scored, dict)
-            else getattr(scored, "product_id", None)
-        )
-        if isinstance(product_id, str):
-            ids.append(product_id)
-    return ids
-
-
-def _presented_ids(state: ShoppingState) -> list[str]:
-    """The products the client is currently showing (the last plan's ids).
-
-    Positional references ("the first two") mean the presented order, i.e.
-    ``selected_ids`` as stamped by the last grid/plan turn — falling back to
-    the checkpointed ranking's top :data:`TOP_N` when no plan has been
-    presented yet.
-    """
-    selected = [pid for pid in (state.get("selected_ids") or []) if isinstance(pid, str)]
-    if selected:
-        return selected
-    return _ranked_ids(state)[:TOP_N]
-
-
-def _last_selected_id(state: ShoppingState) -> str | None:
-    """Target of "that one"/"this one": the last selected id, else ranked[0]."""
-    selected = [pid for pid in (state.get("selected_ids") or []) if isinstance(pid, str)]
-    if selected:
-        return selected[-1]
-    ranked = _ranked_ids(state)
-    return ranked[0] if ranked else None
-
-
-def _mentioned_positions(text: str) -> list[int]:
-    """0-based positions of ordinal/digit references, in order of appearance."""
-    lowered = text.lower()
-    positions: list[int] = []
-    for pattern, position in _POSITION_PATTERNS:
-        if position not in positions and pattern.search(lowered):
-            positions.append(position)
-    return positions
-
-
-def _text_target_id(text: str, state: ShoppingState) -> str | None:
-    """Resolve the product a cart/details phrase points at.
-
-    Precedence: an explicit ordinal ("the second one") in the presented list,
-    then a demonstrative ("that one" -> last selected), then the top pick.
-    """
-    presented = _presented_ids(state)
-    for position in _mentioned_positions(text):
-        if position < len(presented):
-            return presented[position]
-    if _DEMONSTRATIVE_RE.search(text):
-        return _last_selected_id(state)
-    return presented[0] if presented else None
-
-
-def _no_products() -> FollowUp:
-    """The standard clean disclosure for unresolvable targets."""
-    return FollowUp(kind="disclosure", disclosure=NO_PRODUCTS_DISCLOSURE)
-
-
-def _catalog_id_set() -> set[str]:
-    """Valid catalog ids as a set (pure read via :func:`get_catalog`)."""
-    return {product.id for product in get_catalog()}
-
-
-def _resolve_action_followup(action: dict[str, Any], state: ShoppingState) -> FollowUp | None:
-    """Resolve a follow-up against the echoed ``ui_action`` (US4 contract:
-    targets come from ``payload["productId"]``/``payload["productIds"]``,
-    falling back to the presented list; unknown payload ids are ignored in
-    favor of the positional default)."""
-    kind = action.get("type")
-    if kind not in FOLLOWUP_ACTION_TYPES:
-        return None
-    payload = action.get("payload") or {}
-    presented = _presented_ids(state)
-    catalog_ids = _catalog_id_set()
-    if kind == "compare":
-        raw_ids = payload.get("productIds")
-        if isinstance(raw_ids, (list, tuple)):
-            valid = [pid for pid in raw_ids if isinstance(pid, str) and pid in catalog_ids][
-                :MAX_COMPARE
-            ]
-            if len(valid) >= 2:
-                return FollowUp(kind="compare", product_ids=tuple(valid))
-        if len(presented) >= 2:
-            return FollowUp(kind="compare", product_ids=tuple(presented[:2]))
-        return _no_products()
-    target = payload.get("productId")
-    if not isinstance(target, str) or target not in catalog_ids:
-        target = _last_selected_id(state)
-    if target is None:
-        return _no_products()
-    if kind in ("details", "choose"):
-        return FollowUp(kind="details", product_ids=(target,))
-    if kind == "add_to_cart":
-        return FollowUp(kind="add_to_cart", product_ids=(target,))
-    return FollowUp(kind="remove_from_cart", product_ids=(target,))
-
-
-def _resolve_text_followup(text: str, state: ShoppingState) -> FollowUp | None:
-    """Resolve a follow-up from the message text (deterministic regexes).
-
-    Checked in this fixed order: cart view, remove, add, compare, details,
-    then bare positional/demonstrative references (which only count as a
-    follow-up once products have actually been presented — a first message
-    like "my first pair of headphones" must stay a normal request). ``None``
-    means no pattern matched: the normal LLM pipeline runs.
-    """
-    presented = _presented_ids(state)
-    if _CART_VIEW_RE.search(text):
-        return FollowUp(kind="cart_view")
-    if _REMOVE_FROM_CART_RE.search(text):
-        target = _text_target_id(text, state)
-        if target is None:
-            return _no_products()
-        return FollowUp(kind="remove_from_cart", product_ids=(target,))
-    if _ADD_TO_CART_RE.search(text):
-        target = _text_target_id(text, state)
-        if target is None:
-            return _no_products()
-        return FollowUp(kind="add_to_cart", product_ids=(target,))
-    if _COMPARE_RE.search(text):
-        positions = [p for p in _mentioned_positions(text) if p < len(presented)]
-        if len(positions) >= 2:
-            targets = tuple(presented[p] for p in positions[:MAX_COMPARE])
-            return FollowUp(kind="compare", product_ids=targets)
-        if len(presented) >= 2:
-            # "compare the first two" and bare "compare ..." default to the
-            # top two presented products.
-            return FollowUp(kind="compare", product_ids=tuple(presented[:2]))
-        return _no_products()
-    if _DETAILS_RE.search(text):
-        target = _text_target_id(text, state)
-        if target is None:
-            return _no_products()
-        return FollowUp(kind="details", product_ids=(target,))
-    if not presented:
-        return None
-    if _DEMONSTRATIVE_RE.search(text):
-        target = _last_selected_id(state)
-        if target is not None:
-            return FollowUp(kind="details", product_ids=(target,))
-        return None
-    for pattern, position in _POSITION_PATTERNS[:3]:  # ordinal words only
-        if pattern.search(text) and position < len(presented):
-            # A bare positional reference ("the second one") inspects that
-            # product — the details turn of US4.
-            return FollowUp(kind="details", product_ids=(presented[position],))
-    return None
-
-
-def resolve_followup(state: ShoppingState) -> FollowUp | None:
-    """Pure US4 entry point: resolve a follow-up turn from session state.
-
-    Returns ``None`` when nothing matches (normal pipeline). The ui_action
-    path wins over the text path when both are present; ``select_preference``
-    chip actions are never follow-ups (the chip fast-path owns those).
-    """
-    action = state.get("pending_ui_action")
-    if isinstance(action, dict):
-        resolved = _resolve_action_followup(action, state)
-        if resolved is not None:
-            return resolved
-    text = str(state.get("pending_user_text") or "").strip()
-    if text:
-        return _resolve_text_followup(text, state)
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -1056,6 +799,12 @@ _PLAN_ERROR_PAYLOAD: dict[str, str] = {
     "code": "structured_output",
 }
 
+#: Deterministic title of the normal-turn product grid. Plan selection is
+#: code-owned (architecture-review fix): the former PlanSelection LLM call
+#: returned this same string in every mode, so the title is now a constant —
+#: normal turns make 3 model calls (intent, weights, narration), not 4.
+PLAN_TITLE: str = "Best matches for your needs"
+
 
 def _envelope(state: ShoppingState) -> dict[str, Any]:
     """Plan envelope fields shared by every assembly path (no wall clock)."""
@@ -1069,7 +818,7 @@ def _envelope(state: ShoppingState) -> dict[str, Any]:
 def _rank_order_targets(state: ShoppingState, targets: tuple[str, ...]) -> list[str]:
     """Order comparison targets best-ranked first (ranked position, then the
     caller's order for products the current ranking does not contain)."""
-    order = {pid: index for index, pid in enumerate(_ranked_ids(state))}
+    order = {pid: index for index, pid in enumerate(ranked_ids(state))}
     unranked = len(order)
     indexed = list(enumerate(targets))
     indexed.sort(key=lambda pair: (order.get(pair[1], unranked), pair[0]))
@@ -1109,12 +858,12 @@ def _cart_view_plan(state: ShoppingState, cart: list[dict[str, Any]]) -> UIPlan:
 def _build_followup_plan(
     state: ShoppingState, followup: dict[str, Any]
 ) -> tuple[UIPlan, dict[str, Any]]:
-    """Assemble a US4 follow-up plan deterministically — the PlanSelection LLM
-    call is bypassed for follow-up turns: the component kind was already fixed
-    by :func:`resolve_followup`, so there is nothing left for a model to
-    choose. Returns ``(plan, extra_state_update)`` where the extra covers
-    ``selected_ids`` and cart mutations (performed via the pure tools in
-    ``app.tools.cart``)."""
+    """Assemble a US4 follow-up plan deterministically — no model call is
+    involved: the component kind was already fixed by
+    :func:`app.graph.followups.resolve_followup`, so there is nothing left for
+    a model to choose. Returns ``(plan, extra_state_update)`` where the extra
+    covers ``selected_ids`` and cart mutations (performed via the pure tools
+    in ``app.tools.cart``)."""
     kind = followup.get("kind")
     targets = tuple(pid for pid in (followup.get("product_ids") or []) if isinstance(pid, str))
     if kind == "disclosure":
@@ -1171,12 +920,13 @@ def _build_followup_plan(
 def ui_plan_node(state: ShoppingState) -> dict[str, Any]:
     """Assemble + validate the plan deterministically, then emit ``ui_update``.
 
-    Normal turns: the ``PlanSelection`` call only configures the plan
-    (component choice and title); the document is built from ranked data.
-    US4 follow-up turns: :func:`_build_followup_plan` assembles the matching
-    component with no model call at all. A plan that fails Pydantic or
-    catalog-aware validation is never emitted — the turn ends with one
-    ``error`` frame instead (FR-008 / SC-004).
+    Normal turns: the plan is assembled entirely from ranked data — component
+    kind and title are code policy (D3 in spirit: the model configures
+    weights and narration, never plan structure). US4 follow-up turns:
+    :func:`_build_followup_plan` assembles the matching component, also with
+    no model call at all. A plan that fails Pydantic or catalog-aware
+    validation is never emitted — the turn ends with one ``error`` frame
+    instead (FR-008 / SC-004).
     """
     _emit(("status", {"stage": "building_ui"}))
     ranked = state.get("ranked", [])
@@ -1187,20 +937,6 @@ def ui_plan_node(state: ShoppingState) -> dict[str, Any]:
         if isinstance(followup, dict):
             plan, extra = _build_followup_plan(state, followup)
         else:
-            selection = call_structured(
-                get_llm(),
-                PlanSelection,
-                _llm_messages(
-                    _PLAN_SYSTEM_PROMPT,
-                    state.get("pending_user_text", ""),
-                    {
-                        "task": "plan",
-                        "suggested_component": "product_grid",
-                        "title": "Best matches for your needs",
-                        "product_ids": top_ids,
-                    },
-                ),
-            )
             # This wave renders a product grid for normal turns; follow-up
             # turns assemble the other registry types deterministically.
             plan = UIPlan(
@@ -1208,7 +944,7 @@ def ui_plan_node(state: ShoppingState) -> dict[str, Any]:
                 root=ComponentNode(
                     type="product_grid",
                     props=ProductGridProps(
-                        title=selection.title or "Best matches",
+                        title=PLAN_TITLE,
                         product_ids=top_ids,
                         ranked=True,
                     ),
@@ -1220,7 +956,7 @@ def ui_plan_node(state: ShoppingState) -> dict[str, Any]:
                 ),
             )
             extra = {"selected_ids": top_ids}
-        validate_plan(plan, _catalog_id_set())
+        validate_plan(plan, catalog_id_set())
     except (PlanValidationError, ValidationError):
         _emit(("error", dict(_PLAN_ERROR_PAYLOAD)))
         return {"error": dict(_PLAN_ERROR_PAYLOAD)}

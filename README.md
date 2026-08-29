@@ -5,7 +5,7 @@
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white&style=flat-square">
   <img alt="LangGraph" src="https://img.shields.io/badge/LangGraph-1C3C3C?logo=langchain&logoColor=white&style=flat-square">
   <img alt="Pydantic v2" src="https://img.shields.io/badge/Pydantic%20v2-E92063?logo=pydantic&logoColor=white&style=flat-square">
-  <img alt="tests" src="https://img.shields.io/badge/tests-194%20passing-3DDC84?style=flat-square">
+  <img alt="tests" src="https://img.shields.io/badge/tests-209%20passing-3DDC84?style=flat-square">
   <a href="https://github.com/Zahrannnn/agentic-shop/pull/1"><img alt="phase 1" src="https://img.shields.io/badge/phase%201-backend-8A2BE2?style=flat-square"></a>
 </p>
 
@@ -19,7 +19,7 @@ comparisons, and cart views. No pages, no navigation — just a transcript.
 
 > [!TIP]
 > Everything runs **keyless and offline** in mock mode: the full agent pipeline, the
-> SSE API, and all 194 tests. Drop in an OpenCode Zen model when you want a real LLM.
+> SSE API, and all 209 tests. Drop in an OpenCode Zen model when you want a real LLM.
 
 **Explore:** [Quickstart](#-quickstart) · [Architecture](#architecture) · [System design](#system-design) · [Try the MVP scenario](#try-the-mvp-scenario) · [Real model](#use-a-real-model)
 
@@ -28,7 +28,7 @@ comparisons, and cart views. No pages, no navigation — just a transcript.
 ## Features
 
 - 🧠 **Agentic pipeline** — fixed LangGraph backbone (`intent → clarify_gate → search → research → recommend → ui_plan → respond`) with exactly one conditional edge; session state checkpointed per conversation.
-- 📊 **Deterministic ranking** — the LLM proposes preference *weights* only; a pure, unit-tested scorer computes the order. Identical input ⇒ identical ranking, always.
+- 📊 **Deterministic ranking** — the LLM proposes preference *weights* only; a pure, unit-tested scorer computes the order. Identical input ⇒ identical ranking (byte-identical in mock mode; in real mode the scorer is deterministic given the weights, which come from a temp-0 model call).
 - 🎨 **UI as data** — every turn ends with one validated UI plan document (product grid, preference picker, comparison table, details, cart view). The agent can never emit executable code.
 - 💬 **Streaming everything** — server-sent events with a first-class lifecycle (`status` → `message_delta` → `ui_update` → `turn_end`), so clients lock, render, and unlock on contract.
 - 🛡️ **Fail-clean resilience** — schema-validated model outputs with exactly one retry feeding the validation error back; clean `error` events, never raw model text.
@@ -147,7 +147,7 @@ Requires Python 3.12 and [`uv`](https://docs.astral.sh/uv/). No API key needed.
 ```bash
 git clone https://github.com/Zahrannnn/agentic-shop && cd agentic-shop/backend
 uv sync
-uv run pytest                          # 194 tests, fully offline (mock mode)
+uv run pytest                          # 209 tests, fully offline (mock mode)
 uv run uvicorn app.main:app --reload   # LLM_MODE=mock is the default
 ```
 
@@ -213,7 +213,7 @@ LLM_API_STYLE=responses        # muse is a Responses-API-only reasoning model
     ├── app/dsl/          UI plan schemas · validation
     ├── app/api/          /health · /api/chat (SSE)
     ├── fixtures/ui-plans/  shared plan contract corpus
-    └── tests/            194 tests: scorer, tools, DSL, SSE contract, graph, config
+    └── tests/            209 tests: scorer, tools, DSL, SSE contract, graph, followups, config
 ```
 
 ## Development
