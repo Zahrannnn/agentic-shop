@@ -1,0 +1,73 @@
+- generic:
+  - generic:
+    - complementary:
+      - navigation:
+        - link:
+          - /url: /
+          - text: CORELIA
+        - link:
+          - /url: /dashboard
+          - img
+          - text: Dashboard
+        - link:
+          - /url: /profile
+          - img
+          - text: Profile
+        - link:
+          - /url: /health
+          - img
+          - text: Health
+    - generic:
+      - banner:
+        - button:
+          - img
+          - text: Command
+        - generic:
+          - button:
+            - img
+          - separator
+          - generic:
+            - paragraph: Frontend Lead
+            - paragraph: lead@corelia.local
+          - button: Logout
+      - main:
+        - generic:
+          - heading [level=1]: Profile
+          - paragraph: TanStack Form with Zod validation and a mutation boundary ready to replace with a REST call.
+        - generic:
+          - generic:
+            - heading [level=3]: Profile settings
+            - paragraph: This is local demo behavior using the same structure as a real API-backed form.
+          - generic:
+            - generic:
+              - generic:
+                - text: Name
+                - textbox: Frontend Lead
+              - generic:
+                - text: Email
+                - textbox: lead@corelia.local
+              - generic:
+                - text: Role
+                - textbox: Frontend Lead
+              - generic:
+                - text: Theme preference
+                - combobox [expanded]:
+                  - generic: System
+                  - img
+                - combobox
+              - generic:
+                - text: Bio
+                - textbox: Owns the frontend boilerplate, architecture, and delivery standards.
+              - generic:
+                - button: Save profile
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=f2e9] [cursor=pointer]:
+    - img [ref=f2e10]
+  - alert
+  - listbox [ref=f2e72]:
+    - option "System" [active] [selected] [ref=f2e73]:
+      - generic [ref=f2e74]: System
+    - option "Light" [ref=f2e75]:
+      - generic [ref=f2e76]: Light
+    - option "Dark" [ref=f2e77]:
+      - generic [ref=f2e78]: Dark

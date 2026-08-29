@@ -1,0 +1,25 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      # APP_PORT is the app's internal port. Override infra/.env's PORT (the
+      # nginx host port) so it does not leak into the standalone server.
+      - PORT=${APP_PORT:-3000}
+      - HOSTNAME=0.0.0.0
+    expose:
+      - "${APP_PORT:-3000}"
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      - app
+    ports:
+      - "${PORT:-1350}:80"
+    environment:
+      - APP_PORT=${APP_PORT:-3000}
+    volumes:
+      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
