@@ -93,9 +93,9 @@ Frontend contract:
 from langchain_openai import ChatOpenAI
 
 llm = ChatOpenAI(
-    model=settings.LLM_MODEL,                 # e.g. from /models on user's plan
+    model=settings.LLM_MODEL,  # e.g. from /models on user's plan
     api_key=settings.OPENCODE_API_KEY,
-    base_url=settings.OPENCODE_BASE_URL,      # OpenCode gateway /v1 endpoint
+    base_url=settings.OPENCODE_BASE_URL,  # OpenCode gateway /v1 endpoint
     temperature=0,
 )
 structured = llm.with_structured_output(SomePydanticModel)
@@ -117,18 +117,33 @@ one transcript conversation.
 
 ## Open items
 
-1. **Frontend boilerplate** — user provides (repo URL or local path); adapt
-   registry/renderer/protocol layer into it
+1. ~~Frontend boilerplate~~ — resolved: `corelia-next-boilerplate` adopted as
+   `frontend/` (monorepo, PR #5)
 2. **Exact model ID** — pick from user's plan `/models` (needs reliable
-   structured output; wrapper in D8 covers variance)
-3. Repo init — monorepo (`backend/` + boilerplate as `frontend/`) or two repos,
-   decided when boilerplate arrives
+   structured output; wrapper in D8 covers variance; muse-spark free tier
+   works today via env)
+3. ~~Repo init~~ — resolved: monorepo (PR #5)
 4. Zod ↔ Pydantic contract: single source of truth = `fixtures/ui-plans/` +
    contract tests on both sides
 
+## Amendments (2026-08-30 — owner-directed Phase 2 polish)
+
+- **D2 amendment — bounded plan amendment (V2 first slice).** Full
+  diff-patching stays rejected (the transcript renders per-turn plans; diffs
+  only make sense for a repaintable stage). Unlocked in bounded form: a
+  `cart_view` plan MAY carry `amendsTurnId` referencing the earlier cart plan
+  it replaces — the client updates that turn's plan region in place instead of
+  appending a duplicate cart section. Everything else remains full-replace.
+- **D5 amendment — multi-category catalog.** The catalog MAY carry more than
+  one category (starts with headphones + earbuds). Category-specific budget
+  defaults replace the single hard-coded cap; the clarify chips and search are
+  already category-generic.
+- **Latency UX (real mode).** The FE thinking state carries an elapsed-time
+  counter and reassurance rotation; pipeline stage names stay unrendered.
+
 ## V2 backlog (explicitly deferred)
 
-- UI plan patching/diffing (D2)
+- Full plan diff-patching beyond the bounded cart amendment above
 - Free-form agent routing / dynamic supervisor (D6)
 - More components beyond MVP registry set
 - Real product APIs, payments, checkout
