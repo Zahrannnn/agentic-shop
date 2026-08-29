@@ -98,12 +98,16 @@ class PreferencePickerProps(BaseModel):
 
 class ComparisonTableProps(BaseModel):
     """Props for ``comparison_table``; attributes restricted to
-    :data:`ALLOWED_ATTRIBUTES` (checked in ``app/dsl/validate.py``)."""
+    :data:`ALLOWED_ATTRIBUTES` (checked in ``app/dsl/validate.py``).
+    ``values`` is an optional render aid: ``{productId: {attribute: value}}``
+    so the client can show real numbers without a catalog lookup. When present,
+    its keys must be a subset of ``product_ids``."""
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     product_ids: list[str] = Field(min_length=2, max_length=3)
     attributes: list[str] = Field(min_length=1)
+    values: dict[str, dict[str, Any]] | None = None
 
 
 class ProductDetailsProps(BaseModel):

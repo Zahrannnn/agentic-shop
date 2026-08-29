@@ -103,6 +103,22 @@ def _validate_comparison(node: ComponentNode, props: ComparisonTableProps) -> li
         errors.append(
             f"comparison_table may carry at most one 'choose' action, found {choose_count}"
         )
+    if props.values is not None:
+        stray = sorted(set(props.values) - set(props.product_ids))
+        if stray:
+            errors.append(
+                f"comparison_table values reference products outside product_ids: {stray}"
+            )
+        bad_attrs = sorted(
+            {
+                attr
+                for per_product in props.values.values()
+                for attr in per_product
+                if attr not in ALLOWED_ATTRIBUTES
+            }
+        )
+        if bad_attrs:
+            errors.append(f"comparison_table value attributes outside the whitelist: {bad_attrs}")
     return errors
 
 

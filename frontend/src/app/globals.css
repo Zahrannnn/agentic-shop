@@ -2,49 +2,56 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * The Curator's Desk — design tokens (DESIGN.md).
+ * One teal-ink family: Paper/Desk surface steps, Ink/Pencil text, Hairline borders,
+ * Teal Ink accent. No pure black or white anywhere; every neutral is tinted
+ * toward the ink hue. Depth is tonal + hairline, never resting shadows.
+ */
 :root {
-  --background: #f8fafc;
-  --foreground: #111827;
-  --card: #ffffff;
-  --card-foreground: #111827;
-  --popover: #ffffff;
-  --popover-foreground: #111827;
-  --primary: #2563eb;
-  --primary-foreground: #ffffff;
-  --secondary: #eef2ff;
-  --secondary-foreground: #1e1b4b;
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-  --accent: #ecfdf5;
-  --accent-foreground: #065f46;
-  --destructive: #dc2626;
-  --destructive-foreground: #ffffff;
-  --border: #e2e8f0;
-  --input: #cbd5e1;
-  --ring: #2563eb;
-  --radius: 0.5rem;
+  --background: oklch(97% 0.006 200); /* Paper */
+  --foreground: oklch(25% 0.012 200); /* Ink */
+  --card: oklch(97.8% 0.005 200); /* Paper, one hairline step up */
+  --card-foreground: oklch(25% 0.012 200); /* Ink */
+  --popover: oklch(97.8% 0.005 200); /* Paper */
+  --popover-foreground: oklch(25% 0.012 200); /* Ink */
+  --primary: oklch(45% 0.08 200); /* Teal Ink — the agent's commitment */
+  --primary-foreground: oklch(97% 0.006 200); /* Paper */
+  --secondary: oklch(94.5% 0.008 200); /* Desk */
+  --secondary-foreground: oklch(25% 0.012 200); /* Ink */
+  --muted: oklch(94.5% 0.008 200); /* Desk */
+  --muted-foreground: oklch(48% 0.015 200); /* Pencil */
+  --accent: oklch(91.5% 0.02 200); /* Desk, one step toward ink */
+  --accent-foreground: oklch(32% 0.05 200); /* Ink, leaning teal */
+  --destructive: oklch(50% 0.15 25);
+  --destructive-foreground: oklch(97% 0.006 200);
+  --border: oklch(91% 0.008 200); /* Hairline */
+  --input: oklch(91% 0.008 200); /* Hairline */
+  --ring: oklch(45% 0.08 200); /* Teal Ink */
+  --radius: 0.375rem;
 }
 
+/* Desk at night — same family, low chroma; light remains the primary scene. */
 .dark {
-  --background: #0f172a;
-  --foreground: #f8fafc;
-  --card: #111827;
-  --card-foreground: #f8fafc;
-  --popover: #111827;
-  --popover-foreground: #f8fafc;
-  --primary: #60a5fa;
-  --primary-foreground: #0f172a;
-  --secondary: #1e293b;
-  --secondary-foreground: #e0e7ff;
-  --muted: #1e293b;
-  --muted-foreground: #94a3b8;
-  --accent: #064e3b;
-  --accent-foreground: #d1fae5;
-  --destructive: #f87171;
-  --destructive-foreground: #450a0a;
-  --border: #334155;
-  --input: #475569;
-  --ring: #93c5fd;
+  --background: oklch(22% 0.012 200);
+  --foreground: oklch(93% 0.008 200);
+  --card: oklch(25% 0.012 200);
+  --card-foreground: oklch(93% 0.008 200);
+  --popover: oklch(25% 0.012 200);
+  --popover-foreground: oklch(93% 0.008 200);
+  --primary: oklch(72% 0.07 200); /* Teal Ink, lifted for dark paper */
+  --primary-foreground: oklch(20% 0.012 200);
+  --secondary: oklch(28% 0.014 200); /* Desk */
+  --secondary-foreground: oklch(93% 0.008 200);
+  --muted: oklch(28% 0.014 200);
+  --muted-foreground: oklch(68% 0.015 200); /* Pencil */
+  --accent: oklch(32% 0.03 200);
+  --accent-foreground: oklch(90% 0.02 200);
+  --destructive: oklch(65% 0.15 25);
+  --destructive-foreground: oklch(20% 0.012 200);
+  --border: oklch(32% 0.014 200); /* Hairline */
+  --input: oklch(32% 0.014 200);
+  --ring: oklch(72% 0.07 200);
 }
 
 @theme inline {
@@ -67,11 +74,11 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
+  --font-sans: var(--font-editorial-sans, ui-sans-serif, system-ui, sans-serif);
+  --font-mono: var(--font-editorial-mono, ui-monospace, "SFMono-Regular", monospace);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
 }
 
 * {
@@ -86,6 +93,7 @@ body {
   min-height: 100vh;
   background: var(--background);
   color: var(--foreground);
+  font-feature-settings: "ss01" on; /* editorial precision: alternate glyphs where the face supports them */
 }
 
 button,
@@ -94,4 +102,15 @@ input,
 select,
 textarea {
   outline-color: var(--ring);
+}
+
+/* DESIGN.md: reduced motion collapses transitions to opacity only. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-property: opacity !important;
+    transition-duration: 0.01ms !important;
+  }
 }
