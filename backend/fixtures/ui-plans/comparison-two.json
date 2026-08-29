@@ -6,7 +6,23 @@
     "type": "comparison_table",
     "props": {
       "productIds": ["aurora-hush-pro", "cloudline-air"],
-      "attributes": ["price_usd", "battery_hours", "weight_g", "anc_type", "comfort"]
+      "attributes": ["price_usd", "battery_hours", "weight_g", "anc_type", "comfort"],
+      "values": {
+        "aurora-hush-pro": {
+          "price_usd": 179.0,
+          "battery_hours": 45.0,
+          "weight_g": 250.0,
+          "anc_type": "adaptive",
+          "comfort": 4.7
+        },
+        "cloudline-air": {
+          "price_usd": 139.0,
+          "battery_hours": 30.0,
+          "weight_g": 198.0,
+          "anc_type": "active",
+          "comfort": 4.9
+        }
+      }
     },
     "actions": [
       {

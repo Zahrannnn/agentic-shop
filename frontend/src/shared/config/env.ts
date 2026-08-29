@@ -10,6 +10,7 @@ const publicEnvSchema = z.object({
   NEXT_PUBLIC_CORE_API_BASE_URL: z.string().url().optional().or(z.literal("")),
   NEXT_PUBLIC_BILLING_API_BASE_URL: z.string().url().optional().or(z.literal("")),
   NEXT_PUBLIC_REPORTING_API_BASE_URL: z.string().url().optional().or(z.literal("")),
+  NEXT_PUBLIC_AGENT_API_BASE_URL: z.string().url().optional().or(z.literal("")),
 });
 
 type PublicEnvInput = {
@@ -19,6 +20,7 @@ type PublicEnvInput = {
   NEXT_PUBLIC_CORE_API_BASE_URL?: string;
   NEXT_PUBLIC_BILLING_API_BASE_URL?: string;
   NEXT_PUBLIC_REPORTING_API_BASE_URL?: string;
+  NEXT_PUBLIC_AGENT_API_BASE_URL?: string;
 };
 
 declare global {
@@ -35,6 +37,7 @@ function readPublicEnv(): PublicEnvInput {
     NEXT_PUBLIC_CORE_API_BASE_URL: process.env.NEXT_PUBLIC_CORE_API_BASE_URL,
     NEXT_PUBLIC_BILLING_API_BASE_URL: process.env.NEXT_PUBLIC_BILLING_API_BASE_URL,
     NEXT_PUBLIC_REPORTING_API_BASE_URL: process.env.NEXT_PUBLIC_REPORTING_API_BASE_URL,
+    NEXT_PUBLIC_AGENT_API_BASE_URL: process.env.NEXT_PUBLIC_AGENT_API_BASE_URL,
   };
 
   if (typeof window !== "undefined" && window.__RUNTIME_CONFIG__) {
@@ -69,3 +72,12 @@ export const backendServices = [
     baseUrl: env.NEXT_PUBLIC_REPORTING_API_BASE_URL,
   },
 ] as const;
+
+const AGENT_API_DEFAULT_BASE_URL = "http://127.0.0.1:8000";
+
+/** Agent backend base URL; unset or empty resolves to the local dev backend. */
+export const agentApiBaseUrl: string =
+  env.NEXT_PUBLIC_AGENT_API_BASE_URL &&
+  env.NEXT_PUBLIC_AGENT_API_BASE_URL.length > 0
+    ? env.NEXT_PUBLIC_AGENT_API_BASE_URL
+    : AGENT_API_DEFAULT_BASE_URL;

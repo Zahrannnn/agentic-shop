@@ -70,8 +70,12 @@ MUST have a matching `select_preference` action. Allowed action:
 {
   "type": "comparison_table",
   "props": {
-    "productIds": ["aurora-hush-pro", "skyline-hush"],
-    "attributes": ["price_usd", "battery_hours", "weight_g", "anc_type", "comfort"]
+    "productIds": ["aurora-hush-pro", "cloudline-air"],
+    "attributes": ["price_usd", "battery_hours", "weight_g", "anc_type", "comfort"],
+    "values": {
+      "aurora-hush-pro": { "price_usd": 179.0, "anc_type": "adaptive", "comfort": 4.7 },
+      "cloudline-air": { "price_usd": 139.0, "anc_type": "active", "comfort": 4.9 }
+    }
   },
   "actions": [
     { "type": "choose", "label": "Choose Aurora Hush Pro", "payload": { "productId": "aurora-hush-pro" } }
@@ -80,6 +84,9 @@ MUST have a matching `select_preference` action. Allowed action:
 ```
 
 Rules: 2–3 `productIds`; attributes restricted to catalog attribute names.
+`values` (optional, added post-review): `{productId: {attribute: string|number|boolean|null}}`
+render aid so clients show real values without a catalog lookup; when present its
+keys must be a subset of `productIds` and attribute keys inside the whitelist.
 Allowed action: `choose` (max one).
 
 ### `product_details`

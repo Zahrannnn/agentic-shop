@@ -5,8 +5,11 @@
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white&style=flat-square">
   <img alt="LangGraph" src="https://img.shields.io/badge/LangGraph-1C3C3C?logo=langchain&logoColor=white&style=flat-square">
   <img alt="Pydantic v2" src="https://img.shields.io/badge/Pydantic%20v2-E92063?logo=pydantic&logoColor=white&style=flat-square">
-  <img alt="tests" src="https://img.shields.io/badge/tests-209%20passing-3DDC84?style=flat-square">
+  <img alt="Next.js" src="https://img.shields.io/badge/Next.js%2016-000000?logo=next.js&logoColor=white&style=flat-square">
+  <img alt="React 19" src="https://img.shields.io/badge/React%2019-61DAFB?logo=react&logoColor=black&style=flat-square">
+  <img alt="tests" src="https://img.shields.io/badge/tests-345%20passing-3DDC84?style=flat-square">
   <a href="https://github.com/Zahrannnn/agentic-shop/pull/1"><img alt="phase 1" src="https://img.shields.io/badge/phase%201-backend-8A2BE2?style=flat-square"></a>
+  <a href="https://github.com/Zahrannnn/agentic-shop/pull/4"><img alt="phase 2" src="https://img.shields.io/badge/phase%202-frontend-FF6F61?style=flat-square"></a>
 </p>
 
 <p align="center"><em>The UI is an output of the agent, not the place where the agent operates.</em></p>
@@ -19,9 +22,9 @@ comparisons, and cart views. No pages, no navigation — just a transcript.
 
 > [!TIP]
 > Everything runs **keyless and offline** in mock mode: the full agent pipeline, the
-> SSE API, and all 209 tests. Drop in an OpenCode Zen model when you want a real LLM.
+> SSE API, the frontend, and all 345 tests (209 backend + 136 frontend). Drop in an OpenCode Zen model when you want a real LLM.
 
-**Explore:** [Quickstart](#-quickstart) · [Architecture](#architecture) · [System design](#system-design) · [Try the MVP scenario](#try-the-mvp-scenario) · [Real model](#use-a-real-model)
+**Explore:** [Quickstart](#-quickstart) · [Architecture](#architecture) · [System design](#system-design) · [Try the MVP scenario](#try-the-mvp-scenario) · [Design system](#design-system) · [Real model](#use-a-real-model)
 
 > [!TIP]
 > Building the frontend? **[FRONTEND_GUIDE.md](FRONTEND_GUIDE.md)** is the
@@ -149,6 +152,11 @@ The narration is grounded in the *computed* contributions — reasons cite real 
 
 Requires Python 3.12 and [`uv`](https://docs.astral.sh/uv/). No API key needed.
 
+Requires Python 3.12 + [`uv`](https://docs.astral.sh/uv/) for the backend and
+Node 22 + npm for the frontend. No API key needed.
+
+**Backend** (agent pipeline + SSE API):
+
 ```bash
 git clone https://github.com/Zahrannnn/agentic-shop && cd agentic-shop/backend
 uv sync
@@ -156,9 +164,21 @@ uv run pytest                          # 209 tests, fully offline (mock mode)
 uv run uvicorn app.main:app --reload   # LLM_MODE=mock is the default
 ```
 
+**Frontend** (transcript UI + plan renderer):
+
+```bash
+cd ../frontend
+npm install
+npm run verify                         # lint + typecheck + 136 vitest tests + build
+npm run dev                            # open http://localhost:3000/shop
+```
+
+CORS is pre-wired for the Next.js dev ports; the shop page shows a `MOCK`/`REAL`
+badge from the backend's `/health`.
+
 > [!NOTE]
-> Full walkthrough — clarify chips, comparisons, cart, determinism checks, fault
-> injection: [`specs/001-backend-agent-scaffold/quickstart.md`](specs/001-backend-agent-scaffold/quickstart.md).
+> Full walkthroughs — backend: [`specs/001-backend-agent-scaffold/quickstart.md`](specs/001-backend-agent-scaffold/quickstart.md);
+> frontend: [`specs/002-frontend-ui-renderer/quickstart.md`](specs/002-frontend-ui-renderer/quickstart.md).
 
 ## Try the MVP scenario
 
@@ -181,6 +201,27 @@ event: turn_end      data: {}
 Then, in the same session: *"compare the first two"* → a `comparison_table` plan;
 *"add the first one to my cart"* → a `cart_view` plan. The whole search → refine →
 compare → recommend → cart loop happens inside the transcript.
+
+Prefer clicking over curling? Start the frontend (`npm run dev` →
+`http://localhost:3000/shop`) and run the same scenario in the browser — the UI
+renders every plan the agent streams.
+
+## Design system
+
+The frontend has an opinionated visual identity — **"The Curator's Desk"** — encoded
+in two files every FE change must honor: [`PRODUCT.md`](PRODUCT.md) (register, users,
+the confident-curator voice, named anti-references) and [`DESIGN.md`](DESIGN.md)
+(tokens, type scale, elevation, named rules like *The One Underline Rule* and *The
+Paper Rule*).
+
+Implementation lives in `frontend/src/app/globals.css` as OKLCH tokens: warm **Paper**
+neutrals tinted toward a single **Teal Ink** accent (spent only where the agent
+commits), hairline borders over shadows, Space Grotesk + IBM Plex Mono, and a
+`prefers-reduced-motion` collapse. The anti-slop bans are doctrine: no purple-blue
+gradients, no glass cards, no side-stripe borders, no hero-metric template, no
+identical card grids.
+
+---
 
 ## Use a real model
 
@@ -207,34 +248,57 @@ LLM_API_STYLE=responses        # muse is a Responses-API-only reasoning model
 ├── PRD.md                             product requirements (v0.1 MVP)
 ├── DECISIONS.md                       locked architecture decisions (binding, D1–D8)
 ├── AGENTS.md                          crew guide for coding agents
-├── specs/001-backend-agent-scaffold/  spec · research · plan · contracts · tasks
+├── PRODUCT.md / DESIGN.md             impeccable design context (Curator's Desk system)
+├── FRONTEND_GUIDE.md                  agent-ready backend contract for FE implementers
+├── specs/001-backend-agent-scaffold/  backend spec · research · plan · contracts · tasks
+├── specs/002-frontend-ui-renderer/    frontend spec · research · plan · data-model · tasks
 ├── .specify/                          GitHub Spec Kit (constitution, templates)
-└── backend/
-    ├── app/llm/          model factory · mock mode · structured-output wrapper
-    ├── app/catalog/      curated dataset · Pydantic models · loader
-    ├── app/ranking/      the pure deterministic scorer
-    ├── app/tools/        search · pre-scored research · mock cart
-    ├── app/graph/        state · nodes · builder (MemorySaver)
-    ├── app/dsl/          UI plan schemas · validation
-    ├── app/api/          /health · /api/chat (SSE)
-    ├── fixtures/ui-plans/  shared plan contract corpus
-    └── tests/            209 tests: scorer, tools, DSL, SSE contract, graph, followups, config
+├── backend/
+│   ├── app/llm/          model factory · mock mode · structured-output wrapper
+│   ├── app/catalog/      curated dataset · Pydantic models · loader
+│   ├── app/ranking/      the pure deterministic scorer
+│   ├── app/tools/        search · pre-scored research · mock cart
+│   ├── app/graph/        state · nodes · followups · builder (MemorySaver)
+│   ├── app/dsl/          UI plan schemas · validation
+│   ├── app/api/          /health · /api/chat (SSE)
+│   ├── fixtures/ui-plans/  shared plan contract corpus
+│   └── tests/            209 tests: scorer, tools, DSL, SSE contract, graph, config
+└── frontend/             corelia-next-boilerplate (Next.js 16 · React 19 · Tailwind v4)
+    ├── src/features/shopping/   the whole feature: api/ (SSE client, frame parser),
+    │                            hooks/ (use-agent-turn), store/ (RTK slices),
+    │                            validations/ (Zod plan mirror), components/ (renderer
+    │                            registry + transcript UI), utils/
+    ├── src/components/ui/       shadcn primitives (theme = Curator's Desk tokens)
+    ├── src/shared/              env config · store composition · providers
+    └── ...                      vitest setup, husky, Docker/CI infra
 ```
 
 ## Development
 
+**Backend** (`cd backend`):
+
 ```bash
-cd backend
 uv sync
 uv run ruff check .
 uv run ruff format --check .
 uv run pytest
 ```
 
-- **Hooks**: `uv tool install pre-commit && pre-commit install` (ruff + hygiene).
+**Frontend** (`cd frontend`):
+
+```bash
+npm install
+npm run verify        # eslint + tsc --noEmit + vitest + next build
+```
+
+- **Hooks**: root `uv tool install pre-commit && pre-commit install` (ruff + hygiene);
+  `frontend/` ships its own husky + lint-staged via `npm install`.
 - **Flow**: feature work goes through Spec Kit (`$speckit-specify` → plan → tasks →
   implement); every plan is gated against the project constitution
   (`.specify/memory/constitution.md`).
+- **Design**: frontend work follows `PRODUCT.md` + `DESIGN.md` (the Curator's Desk
+  doctrine — restrained light palette, one teal-ink accent, editorial type, the
+  named anti-slop bans).
 - **Commits**: Conventional Commits, small focused PRs (PR template included).
-- **Next phase**: the frontend lands on a Next.js boilerplate — Tailwind + shadcn/ui,
-  zustand, and a Zod mirror of the plan DSL validated against the same fixtures.
+- **Next up**: Phase 2 polish — real-mode latency UX, catalog browsing beyond the
+  flights scenario, and the V2 backlog (plan patching, more categories).

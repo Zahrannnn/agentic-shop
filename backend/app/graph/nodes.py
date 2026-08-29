@@ -855,6 +855,17 @@ def _cart_view_plan(state: ShoppingState, cart: list[dict[str, Any]]) -> UIPlan:
     )
 
 
+def _comparison_value(product: Product, attribute: str) -> Any:
+    """Display-ready value for one catalog attribute (``None`` → client renders
+    a placeholder). Review attributes come from the pre-scored mirror (D5);
+    everything else is a direct field."""
+    if attribute in {"comfort", "anc", "sound", "battery", "value"}:
+        return getattr(product.review_scores, attribute, None)
+    if attribute == "codecs":
+        return ", ".join(product.codecs) or None
+    return getattr(product, attribute, None)
+
+
 def _build_followup_plan(
     state: ShoppingState, followup: dict[str, Any]
 ) -> tuple[UIPlan, dict[str, Any]]:
@@ -879,6 +890,13 @@ def _build_followup_plan(
         ordered = _rank_order_targets(state, targets)
         best = ordered[0]
         best_name = next(p.name for p in get_catalog() if p.id == best)
+        catalog_by_id = {p.id: p for p in get_catalog()}
+        values = {
+            pid: {
+                attr: _comparison_value(catalog_by_id[pid], attr) for attr in COMPARISON_ATTRIBUTES
+            }
+            for pid in ordered
+        }
         plan = UIPlan(
             **_envelope(state),
             root=ComponentNode(
@@ -886,6 +904,7 @@ def _build_followup_plan(
                 props=ComparisonTableProps(
                     product_ids=ordered,
                     attributes=list(COMPARISON_ATTRIBUTES),
+                    values=values,
                 ),
                 actions=[
                     UIAction(
