@@ -23,6 +23,11 @@ comparisons, and cart views. No pages, no navigation — just a transcript.
 
 **Explore:** [Quickstart](#-quickstart) · [Architecture](#architecture) · [System design](#system-design) · [Try the MVP scenario](#try-the-mvp-scenario) · [Real model](#use-a-real-model)
 
+> [!TIP]
+> Building the frontend? **[FRONTEND_GUIDE.md](FRONTEND_GUIDE.md)** is the
+> agent-ready contract: endpoints, SSE state machine, plan registry, and a
+> definition of done — no backend code reading required.
+
 ---
 
 ## Features
