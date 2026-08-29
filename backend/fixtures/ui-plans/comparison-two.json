@@ -1,0 +1,19 @@
+{
+  "planVersion": "1",
+  "sessionId": "spec-fixture",
+  "turnId": 1,
+  "root": {
+    "type": "comparison_table",
+    "props": {
+      "productIds": ["aurora-hush-pro", "cloudline-air"],
+      "attributes": ["price_usd", "battery_hours", "weight_g", "anc_type", "comfort"]
+    },
+    "actions": [
+      {
+        "type": "choose",
+        "label": "Choose Aurora Hush Pro",
+        "payload": { "productId": "aurora-hush-pro" }
+      }
+    ]
+  }
+}

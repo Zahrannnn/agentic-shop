@@ -1,0 +1,19 @@
+{
+  "planVersion": "1",
+  "sessionId": "spec-fixture",
+  "turnId": 1,
+  "root": {
+    "type": "cart_view",
+    "props": {
+      "items": [{ "productId": "aurora-hush-pro", "quantity": 1 }],
+      "totalUsd": 179.0
+    },
+    "actions": [
+      {
+        "type": "remove_from_cart",
+        "label": "Remove",
+        "payload": { "productId": "aurora-hush-pro" }
+      }
+    ]
+  }
+}

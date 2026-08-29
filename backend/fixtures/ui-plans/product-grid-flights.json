@@ -1,0 +1,18 @@
+{
+  "planVersion": "1",
+  "sessionId": "spec-fixture",
+  "turnId": 1,
+  "root": {
+    "type": "product_grid",
+    "props": {
+      "title": "Best matches for long flights",
+      "productIds": ["aurora-hush-pro", "cloudline-air", "maple-ridge-comfort-150"],
+      "ranked": true
+    },
+    "actions": [
+      { "type": "compare", "label": "Compare", "payload": {} },
+      { "type": "details", "label": "Details", "payload": {} },
+      { "type": "add_to_cart", "label": "Add to cart", "payload": {} }
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "planVersion": "1",
+  "sessionId": "spec-fixture",
+  "turnId": 1,
+  "root": {
+    "type": "product_details",
+    "props": {
+      "productId": "aurora-hush-pro",
+      "showQuotes": true
+    },
+    "actions": []
+  }
+}
