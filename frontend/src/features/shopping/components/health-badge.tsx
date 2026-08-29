@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { Skeleton } from "@/components/ui/skeleton";
+
 import { agentApiBaseUrl } from "@/shared/config/env";
 
 /**
@@ -55,15 +57,13 @@ export function HealthBadge() {
   }, []);
 
   if (mode === "loading") {
-    // Reserved space, nothing announced yet.
+    // shadcn Skeleton placeholder while the health check resolves.
     return (
-      <span
+      <Skeleton
         data-testid="health-badge"
         aria-hidden="true"
-        className="inline-flex items-center rounded-md border border-transparent px-2 py-1 text-xs font-medium uppercase tracking-[0.05em] text-transparent"
-      >
-        ·
-      </span>
+        className="inline-flex h-6 w-14 items-center rounded-md"
+      />
     );
   }
 

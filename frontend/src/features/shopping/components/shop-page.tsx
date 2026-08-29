@@ -127,7 +127,7 @@ export function ShopPage() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="border-b">
+      <header className="sticky top-0 z-10 border-b bg-background">
         <div className="flex w-full items-center justify-between px-6 py-4">
           <p className="text-xl font-semibold tracking-tight">agentic-shop</p>
           <HealthBadge />
@@ -178,7 +178,7 @@ export function ShopPage() {
         </div>
       </main>
 
-      <footer className="border-t">
+      <footer className="sticky bottom-0 z-10 border-t bg-background">
         <div className="w-full px-6 py-4">
           {expiredNotice ? (
             <div

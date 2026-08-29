@@ -510,14 +510,31 @@ describe("ShopPage health badge", () => {
     );
     render(<ShopPage />);
 
-    const badge = await screen.findByTestId("health-badge");
+    // The badge re-queries inside waitFor: loading renders a Skeleton div and
+    // the resolved mode swaps it for a span (different element type).
     await waitFor(() => {
-      expect(badge).toHaveTextContent("MOCK");
+      expect(screen.getByTestId("health-badge")).toHaveTextContent("MOCK");
     });
-    expect(badge).toHaveAttribute("data-mode", "mock");
+    expect(
+      screen.getByTestId("health-badge").querySelector(".animate-pulse"),
+    ).toBeNull();
+    expect(screen.getByTestId("health-badge")).toHaveAttribute(
+      "data-mode",
+      "mock",
+    );
     expect(fetchMock).toHaveBeenCalledWith(
       "http://127.0.0.1:8000/health",
       { cache: "no-store" },
+    );
+  });
+
+  it("shows a skeleton while the health check resolves, then the mode", async () => {
+    fetchMock.mockImplementationOnce(
+      () => new Promise<Response>(() => undefined),
+    );
+    render(<ShopPage />);
+    expect(screen.getByTestId("health-badge").className).toContain(
+      "animate-pulse",
     );
   });
 
@@ -527,10 +544,12 @@ describe("ShopPage health badge", () => {
     );
     render(<ShopPage />);
 
-    const badge = await screen.findByTestId("health-badge");
     await waitFor(() => {
-      expect(badge).toHaveTextContent("OFFLINE");
+      expect(screen.getByTestId("health-badge")).toHaveTextContent("OFFLINE");
     });
-    expect(badge).toHaveAttribute("data-mode", "offline");
+    expect(screen.getByTestId("health-badge")).toHaveAttribute(
+      "data-mode",
+      "offline",
+    );
   });
 });
