@@ -73,7 +73,35 @@ _INTERNAL_ERROR_MESSAGE = "Something went wrong on our side. Please try again."
 # ---------------------------------------------------------------------------
 
 
-@router.get("/health")
+@router.get(
+    "/health",
+    tags=["system"],
+    summary="Liveness probe plus the effective LLM mode",
+    description=(
+        'Returns `{"status": "ok"}` and the effective mode: `mock` (deterministic, '
+        "keyless, offline) or `real` (OpenCode gateway). Never echoes secrets."
+    ),
+    responses={
+        200: {
+            "description": "Service is up.",
+            "content": {
+                "application/json": {
+                    "example": {"status": "ok", "mode": "mock"},
+                    "examples": {
+                        "mock": {
+                            "summary": "Mock mode (default)",
+                            "value": {"status": "ok", "mode": "mock"},
+                        },
+                        "real": {
+                            "summary": "Real gateway model configured",
+                            "value": {"status": "ok", "mode": "real"},
+                        },
+                    },
+                }
+            },
+        }
+    },
+)
 async def health() -> dict[str, str]:
     """Liveness plus the effective LLM mode; never echoes secrets."""
     return {"status": "ok", "mode": "mock" if get_settings().is_mock else "real"}
@@ -166,7 +194,93 @@ async def sse_generator(
         _in_flight.discard(session_id)
 
 
-@router.post("/api/chat")
+_SSE_SUCCESS_EXAMPLE = (
+    'event: status\ndata: {"stage":"intent_parsed"}\n\n'
+    'event: status\ndata: {"stage":"searching"}\n\n'
+    'event: status\ndata: {"stage":"found_n","count":14}\n\n'
+    'event: status\ndata: {"stage":"researching"}\n\n'
+    'event: status\ndata: {"stage":"ranking"}\n\n'
+    'event: status\ndata: {"stage":"building_ui"}\n\n'
+    'event: message_delta\ndata: {"text":"Based on your priorities, here are my top picks."}\n\n'
+    'event: message_delta\ndata: {"text":"Aurora Hush Pro ($179): adaptive ANC rated 4.9/5..."}\n\n'
+    'event: ui_update\ndata: {"planVersion":"1","sessionId":"demo-12345","turnId":1,'
+    '"root":{"type":"product_grid","props":{"title":"Best matches for your needs",'
+    '"productIds":["aurora-hush-pro","cloudline-air","maple-ridge-comfort-150"],'
+    '"ranked":true},"actions":[{"type":"compare","label":"Compare","payload":{}}]}}\n\n'
+    "event: turn_end\ndata: {}\n\n"
+)
+
+
+@router.post(
+    "/api/chat",
+    tags=["chat"],
+    summary="Start one streamed agent turn (SSE)",
+    description=(
+        "Accepts one natural-language message (or a `ui_action` from a rendered plan) "
+        "and streams the agent's turn back as `text/event-stream`.\n\n"
+        "**Frame order (fixed):** zero or more `status` (stages in order "
+        "`intent_parsed → searching → found_n → researching → ranking → building_ui`), "
+        "then `message_delta` prose increments, then at most one `ui_update` carrying "
+        "a **full UI plan** (full replace — never a delta), then exactly one terminal "
+        "frame: `turn_end` on success, `error` on failure (nothing follows it).\n\n"
+        "**Sessions:** `session_id` scopes the conversation; state lives in server "
+        "memory. Send `resume: true` when re-attaching to a conversation this server "
+        "may not know (e.g. after a restart) — an unknown session answers **404** and "
+        "the client should restart without the flag.\n\n"
+        "**Plan documents:** `ui_update` data is the plan envelope itself. The "
+        "component registry, prop bounds, and allowed actions are specified in "
+        "`specs/001-backend-agent-scaffold/contracts/ui-dsl.md`, with renderable "
+        "examples in `backend/fixtures/ui-plans/*.json`."
+    ),
+    responses={
+        200: {
+            "description": (
+                "One agent turn as `text/event-stream`. Frames are "
+                "`event: <type>\\ndata: <json>\\n\\n`; exactly one of `turn_end` / "
+                "`error` terminates the stream."
+            ),
+            "content": {
+                "text/event-stream": {
+                    "example": _SSE_SUCCESS_EXAMPLE,
+                }
+            },
+        },
+        404: {
+            "description": (
+                "`resume: true` was sent for a session this server process does not "
+                "know (never seen, or restarted since). Restart the conversation "
+                "without the `resume` flag."
+            ),
+            "content": {"application/json": {"example": {"detail": "unknown_session"}}},
+        },
+        409: {
+            "description": (
+                "A turn is already streaming for this `session_id`; other sessions "
+                "are unaffected. Wait for `turn_end`, then retry."
+            ),
+            "content": {"application/json": {"example": {"detail": "turn_in_flight"}}},
+        },
+        422: {
+            "description": (
+                "Request body violates the schema (session_id length, message length, "
+                "or a body with neither a message nor a ui_action)."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": [
+                            {
+                                "loc": ["body", "session_id"],
+                                "msg": "String should have at least 8 characters",
+                                "type": "string_too_short",
+                            }
+                        ]
+                    }
+                }
+            },
+        },
+    },
+)
 async def chat(request: ChatRequest) -> StreamingResponse:
     """Start one streamed turn for ``session_id``.
 

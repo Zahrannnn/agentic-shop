@@ -19,7 +19,7 @@ lowercase word (``stage``, ``count``, ``text``, ``plan``, ``message``,
 import json
 from typing import Annotated, Any, ClassVar, Literal, Self
 
-from pydantic import BaseModel, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 __all__ = [
     "STAGE_ORDER",
@@ -86,6 +86,42 @@ class ChatRequest(BaseModel):
     message: Annotated[str, StringConstraints(max_length=2000)] = ""
     ui_action: UIActionIn | None = None
     resume: bool = False
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "summary": "First message of a new session",
+                    "value": {
+                        "session_id": "b1e0c8de-2f6a-4c6f-9a4d-2f1e0b9c8d77",
+                        "message": (
+                            "Help me find the best headphones for long flights "
+                            "under $200. Noise cancellation and comfort matter most."
+                        ),
+                    },
+                },
+                {
+                    "summary": "Re-attach to an existing session after a reload",
+                    "value": {
+                        "session_id": "b1e0c8de-2f6a-4c6f-9a4d-2f1e0b9c8d77",
+                        "message": "compare the first two",
+                        "resume": True,
+                    },
+                },
+                {
+                    "summary": "UI action tapped on a rendered plan (no text)",
+                    "value": {
+                        "session_id": "b1e0c8de-2f6a-4c6f-9a4d-2f1e0b9c8d77",
+                        "ui_action": {
+                            "type": "add_to_cart",
+                            "label": "Add to cart",
+                            "payload": {"productId": "aurora-hush-pro"},
+                        },
+                    },
+                },
+            ]
+        }
+    )
 
     @model_validator(mode="after")
     def _require_message_or_ui_action(self) -> Self:
