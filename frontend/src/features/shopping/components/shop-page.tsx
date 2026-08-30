@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
+import type { CatalogProduct } from "../api/catalog-client";
 import { SESSION_STORAGE_KEY } from "../store";
 import {
   useAgentTurn,
@@ -10,6 +11,7 @@ import {
   type SendOutcome,
 } from "../hooks/use-agent-turn";
 import type { PlanAction } from "../validations/plan-schema";
+import { CatalogSheet } from "./catalog-sheet";
 import { HealthBadge } from "./health-badge";
 import { TranscriptTurn } from "./transcript-turn";
 import { TurnComposer } from "./turn-composer";
@@ -69,6 +71,7 @@ function hasRehydratedSession(): boolean {
 export function ShopPage() {
   const { turns, phase, isBusy, sessionId, send, startFresh } = useAgentTurn();
   const [expiredNotice, setExpiredNotice] = useState(false);
+  const [catalogOpen, setCatalogOpen] = useState(false);
   const resumeRef = useRef(hasRehydratedSession());
   // The session id is random per process/store, so server and client renders
   // would disagree during hydration (React #418). Render it only after mount;
@@ -117,6 +120,18 @@ export function ShopPage() {
     [submit],
   );
 
+  // Catalog sheet → chat: closes the sheet and reuses the same submit path
+  // as typed sends, so the resume policy and 404 recovery are identical.
+  const handleAskAbout = useCallback(
+    (product: CatalogProduct) => {
+      setCatalogOpen(false);
+      void submit({
+        message: `Tell me more about the ${product.name} (${product.id}).`,
+      });
+    },
+    [submit],
+  );
+
   const handleNewConversation = useCallback(() => {
     resumeRef.current = false;
     setExpiredNotice(false);
@@ -130,7 +145,17 @@ export function ShopPage() {
       <header className="sticky top-0 z-10 border-b bg-background">
         <div className="flex w-full items-center justify-between px-6 py-4">
           <p className="text-xl font-semibold tracking-tight">agentic-shop</p>
-          <HealthBadge />
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="browse-catalog"
+              onClick={() => setCatalogOpen(true)}
+            >
+              Browse catalog
+            </Button>
+            <HealthBadge />
+          </div>
         </div>
       </header>
 
@@ -217,6 +242,12 @@ export function ShopPage() {
           </div>
         </div>
       </footer>
+
+      <CatalogSheet
+        open={catalogOpen}
+        onOpenChange={setCatalogOpen}
+        onAskAbout={handleAskAbout}
+      />
     </div>
   );
 }
