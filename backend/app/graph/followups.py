@@ -117,6 +117,15 @@ _DETAILS_RE = re.compile(r"\btell me more about\b|\bdetails\b", re.IGNORECASE)
 _DEMONSTRATIVE_RE = re.compile(r"\b(?:that|this)\s+one\b", re.IGNORECASE)
 
 #: Ordinal words / bare digits -> 0-based position in the presented list.
+#: Multi-position phrases -> ordered 0-based positions ("compare the
+#: first two", "top three"). Checked before single ordinals.
+#: Multi-position phrases -> ordered 0-based positions ("compare the
+#: first two", "top three"). Checked before single ordinals.
+_POSITION_PAIR_PATTERNS: tuple[tuple[re.Pattern[str], tuple[int, ...]], ...] = (
+    (re.compile(r"\b(?:first|top)\s+three\b|\ball\s+three\b", re.IGNORECASE), (0, 1, 2)),
+    (re.compile(r"\b(?:first|top)\s+two\b|\ball\s+two\b", re.IGNORECASE), (0, 1)),
+)
+
 _POSITION_PATTERNS: tuple[tuple[re.Pattern[str], int], ...] = (
     (re.compile(r"\bfirst\b", re.IGNORECASE), 0),
     (re.compile(r"\bsecond\b", re.IGNORECASE), 1),
@@ -167,6 +176,9 @@ def _last_selected_id(state: ShoppingState) -> str | None:
 def _mentioned_positions(text: str) -> list[int]:
     """0-based positions of ordinal/digit references, in order of appearance."""
     lowered = text.lower()
+    for pattern, pair in _POSITION_PAIR_PATTERNS:
+        if pattern.search(lowered):
+            return list(pair)
     positions: list[int] = []
     for pattern, position in _POSITION_PATTERNS:
         if position not in positions and pattern.search(lowered):
@@ -227,7 +239,8 @@ def _resolve_action_followup(action: dict[str, Any], state: ShoppingState) -> Fo
             if len(valid) >= 2:
                 return FollowUp(kind="compare", product_ids=tuple(valid))
         if len(presented) >= 2:
-            return FollowUp(kind="compare", product_ids=tuple(presented[:2]))
+            # Bare grid-level Compare: every presented pick, up to the table cap.
+            return FollowUp(kind="compare", product_ids=tuple(presented[:MAX_COMPARE]))
         return _no_products()
     target = payload.get("productId")
     if not isinstance(target, str) or target not in catalog_ids:
@@ -269,9 +282,10 @@ def _resolve_text_followup(text: str, state: ShoppingState) -> FollowUp | None:
             targets = tuple(presented[p] for p in positions[:MAX_COMPARE])
             return FollowUp(kind="compare", product_ids=targets)
         if len(presented) >= 2:
-            # "compare the first two" and bare "compare ..." default to the
-            # top two presented products.
-            return FollowUp(kind="compare", product_ids=tuple(presented[:2]))
+            # No explicit positions: compare every presented pick (up to the
+            # table cap) — "compare the first two" with explicit positions is
+            # handled by the positional branch above.
+            return FollowUp(kind="compare", product_ids=tuple(presented[:MAX_COMPARE]))
         return _no_products()
     if _DETAILS_RE.search(text):
         target = _text_target_id(text, state)

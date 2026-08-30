@@ -89,9 +89,11 @@ def test_us4_resolve_followup_patterns() -> None:
             "", action={"type": "choose", "label": "x", "payload": {"productId": second}}
         )
     ) == FollowUp("details", (second,))
+    # The grid's bare Compare button compares EVERY presented pick (up to
+    # three); explicit positions keep their exact selection.
     assert resolve_followup(
         _followup_state("", action={"type": "compare", "label": "Compare", "payload": {}})
-    ) == FollowUp("compare", (first, second))
+    ) == FollowUp("compare", (first, second, third))
     assert resolve_followup(
         _followup_state(
             "", action={"type": "details", "label": "Details", "payload": {"productId": "nope"}}
