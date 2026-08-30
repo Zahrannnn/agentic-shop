@@ -1,16 +1,20 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/utils/cn";
 import type { PlanAction, ProductGridProps } from "../../validations/plan-schema";
 
 /**
- * Ranked product grid (Curator's Desk): the title is the Headline, every row
- * is a flat Paper card behind a hairline, and the only Teal Ink on the view is
- * the underline on the top-ranked id — the agent's commitment (One Underline).
+ * Ranked product grid (Curator's Desk, ecommerce register): each card is a
+ * flat Paper tile with the product name as its title, the price in the mono
+ * tabular cut, an ANC badge when the product actually cancels noise, and the
+ * mono catalog id beneath — the card's provenance. The only Teal Ink on the
+ * view is the underline on the top-ranked product — the agent's commitment
+ * (One Underline).
  *
- * The wire contract carries ids only (no names, no prices), so the catalog id
- * stands in as the product identifier, set in the mono cut.
+ * Cards render from the optional `products` snapshot when the backend provides
+ * it; a plan without the snapshot degrades to the mono-id card.
  */
 export type ProductGridComponentProps = {
   props: ProductGridProps;
@@ -34,6 +38,7 @@ export function ProductGrid({ props, actions, onAction }: ProductGridComponentPr
   const compareAction = actions.find((action) => action.type === "compare");
   const detailsAction = actions.find((action) => action.type === "details");
   const addToCartAction = actions.find((action) => action.type === "add_to_cart");
+  const snapshot = new Map((props.products ?? []).map((product) => [product.id, product]));
 
   return (
     <section data-testid="plan-product_grid">
@@ -41,29 +46,52 @@ export function ProductGrid({ props, actions, onAction }: ProductGridComponentPr
       <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {props.productIds.map((productId, index) => {
           const recommended = props.ranked && index === 0;
+          const product = snapshot.get(productId);
           return (
             <li
               key={productId}
               data-testid="product-card"
               data-product-id={productId}
-              className="rounded-lg border bg-card p-4"
+              className="flex flex-col gap-3 rounded-lg border bg-card p-4"
             >
-              {props.ranked ? (
-                <p className="text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
-                  {rankLabel(index)}
+              <div className="flex items-center justify-between">
+                {props.ranked ? (
+                  <p className="text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
+                    {rankLabel(index)}
+                  </p>
+                ) : (
+                  <span />
+                )}
+                {product && product.ancType !== "none" ? (
+                  <Badge variant="secondary" className="uppercase">
+                    {product.ancType} ANC
+                  </Badge>
+                ) : null}
+              </div>
+
+              <div>
+                <p
+                  className={cn(
+                    "text-base font-medium leading-snug",
+                    recommended && "underline decoration-primary decoration-2 underline-offset-4",
+                  )}
+                >
+                  {product?.name ?? productId}
+                </p>
+                <p className="mt-0.5 font-mono text-xs text-muted-foreground">{productId}</p>
+              </div>
+
+              {product ? (
+                <p
+                  data-testid={`price-${productId}`}
+                  className="font-mono text-lg tabular-nums text-foreground"
+                >
+                  ${product.priceUsd.toFixed(2)}
                 </p>
               ) : null}
-              <p
-                className={cn(
-                  "font-mono text-sm leading-relaxed",
-                  recommended &&
-                    "underline decoration-primary decoration-2 underline-offset-4",
-                )}
-              >
-                {productId}
-              </p>
+
               {detailsAction || addToCartAction ? (
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-auto flex flex-wrap gap-2">
                   {detailsAction ? (
                     <Button
                       variant="outline"

@@ -6,13 +6,49 @@
     "type": "product_grid",
     "props": {
       "title": "Best matches for long flights",
-      "productIds": ["aurora-hush-pro", "cloudline-air", "maple-ridge-comfort-150"],
-      "ranked": true
+      "productIds": [
+        "aurora-hush-pro",
+        "cloudline-air",
+        "maple-ridge-comfort-150"
+      ],
+      "ranked": true,
+      "products": [
+        {
+          "id": "aurora-hush-pro",
+          "name": "Aurora Hush Pro",
+          "priceUsd": 179.0,
+          "ancType": "adaptive"
+        },
+        {
+          "id": "cloudline-air",
+          "name": "Cloudline Air",
+          "priceUsd": 139.0,
+          "ancType": "active"
+        },
+        {
+          "id": "maple-ridge-comfort-150",
+          "name": "Maple Ridge Comfort 150",
+          "priceUsd": 149.0,
+          "ancType": "active"
+        }
+      ]
     },
     "actions": [
-      { "type": "compare", "label": "Compare", "payload": {} },
-      { "type": "details", "label": "Details", "payload": {} },
-      { "type": "add_to_cart", "label": "Add to cart", "payload": {} }
+      {
+        "type": "compare",
+        "label": "Compare",
+        "payload": {}
+      },
+      {
+        "type": "details",
+        "label": "Details",
+        "payload": {}
+      },
+      {
+        "type": "add_to_cart",
+        "label": "Add to cart",
+        "payload": {}
+      }
     ]
   }
 }

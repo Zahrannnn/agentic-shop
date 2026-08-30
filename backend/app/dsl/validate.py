@@ -135,6 +135,13 @@ def _validate_props_product_ids(props: Any, valid_product_ids: set[str]) -> list
     unknown = [pid for pid in referenced if pid not in valid_product_ids]
     if unknown:
         errors.append(f"plan references unknown product ids: {sorted(set(unknown))}")
+    if isinstance(props, ProductGridProps) and props.products is not None:
+        snapshot_ids = [product.id for product in props.products]
+        if sorted(snapshot_ids) != sorted(props.product_ids):
+            errors.append(
+                "product_grid products snapshot must match product_ids exactly: "
+                f"{sorted(snapshot_ids)} vs {sorted(props.product_ids)}"
+            )
     return errors
 
 

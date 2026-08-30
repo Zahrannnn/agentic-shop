@@ -58,12 +58,20 @@ const ALLOWED_ACTIONS_BY_TYPE: Readonly<
   text_block: [],
 };
 
+const gridProductSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  priceUsd: z.number(),
+  ancType: z.string().min(1),
+});
+
 const productGridComponentSchema = z.object({
   type: z.literal("product_grid"),
   props: z.object({
     title: z.string().min(1),
     productIds: z.array(z.string()).min(1).max(6),
     ranked: z.boolean(),
+    products: z.array(gridProductSchema).optional(),
   }),
   actions: z.array(planActionSchema),
 });
