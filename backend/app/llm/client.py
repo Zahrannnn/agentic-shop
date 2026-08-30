@@ -25,10 +25,8 @@ Public surface
 from __future__ import annotations
 
 import json
-import os
 import re
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
 from typing import Any
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
@@ -549,43 +547,6 @@ _JSON_MODE_MODELS: set[str] = set()
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class _BootstrapSettings:
-    """Environment-read fallback used only while ``app.config`` is absent.
-
-    Mirrors the agreed ``Settings`` field names (task T004). Once
-    ``app.config.get_settings`` is importable it is always preferred; this
-    keeps the LLM module runnable (and the keyless verification green) in the
-    interim without touching any other module.
-    """
-
-    LLM_MODE: str = "mock"
-    LLM_MODEL: str = ""
-    OPENCODE_BASE_URL: str = ""
-    OPENCODE_API_KEY: str = ""
-    LLM_API_STYLE: str = "auto"
-
-    @classmethod
-    def from_env(cls) -> _BootstrapSettings:
-        """Read the settings straight from process environment."""
-        return cls(
-            LLM_MODE=os.environ.get("LLM_MODE", "mock"),
-            LLM_MODEL=os.environ.get("LLM_MODEL", ""),
-            OPENCODE_BASE_URL=os.environ.get("OPENCODE_BASE_URL", ""),
-            OPENCODE_API_KEY=os.environ.get("OPENCODE_API_KEY", ""),
-            LLM_API_STYLE=os.environ.get("LLM_API_STYLE", "auto"),
-        )
-
-
-def _load_settings() -> Any:
-    """Load settings lazily from ``app.config``, falling back to env vars."""
-    try:
-        from app.config import get_settings  # noqa: PLC0415 — lazy by design
-    except ImportError:
-        return _BootstrapSettings.from_env()
-    return get_settings()
-
-
 def _build_llm(settings: Any) -> Any:
     """Construct (uncached) the LLM described by *settings*.
 
@@ -643,7 +604,9 @@ def get_llm() -> Any:
     changing the environment.
     """
     global _llm_cache_key, _cached_llm
-    settings = _load_settings()
+    from app.config import get_settings  # noqa: PLC0415 — lazy by design
+
+    settings = get_settings()
     key = (
         str(settings.LLM_MODE or "mock"),
         str(settings.LLM_MODEL or ""),

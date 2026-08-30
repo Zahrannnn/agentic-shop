@@ -2,7 +2,6 @@
 // import from this barrel only.
 export {
   CATALOG_IDS,
-  CATALOG_PRODUCT_IDS,
   KNOWN_ATTRIBUTES,
 } from "./utils/catalog-refs";
 export {
@@ -29,7 +28,6 @@ export type {
   UiPlan,
 } from "./validations/plan-schema";
 export {
-  markSessionLive,
   resetSessionExpired,
   selectSessionId,
   sessionSlice,

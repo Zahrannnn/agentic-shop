@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login: async (input) => {
         const nextSession = await loginWithMockSession(input);
         setSession(nextSession);
-        router.push(routes.dashboard);
+        router.push(routes.shop);
       },
       logout: () => {
         clearMockSession();

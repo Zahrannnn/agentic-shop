@@ -127,7 +127,7 @@ START → intent → clarify_gate ──(ask)──→ ui_agent_ask ──→ EN
 |---|---|---|
 | `plan_version` | `str` | `"1"` in MVP |
 | `session_id` | `str` | echo of the session |
-| `turn_id` | `str` | monotonically increasing per session (no wall clock — determinism) |
+| `turn_id` | `int` | monotonically increasing per session (no wall clock — determinism); matches the wire contract and fixtures |
 | `root` | `ComponentNode` | exactly one root component |
 
 ### ComponentNode

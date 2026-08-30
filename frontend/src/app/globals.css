@@ -1,5 +1,48 @@
 @import "tailwindcss";
 
+/* Vibrant Curator palette — warm paper surface with coral, violet, and teal accents */
+:root {
+  --background: oklch(98% 0.014 88);
+  --foreground: oklch(22% 0.03 265);
+  --card: oklch(99.5% 0.01 88);
+  --card-foreground: oklch(22% 0.03 265);
+  --popover: oklch(99.5% 0.01 88);
+  --popover-foreground: oklch(22% 0.03 265);
+  --primary: oklch(58% 0.2 25);
+  --primary-foreground: oklch(99% 0.005 88);
+  --secondary: oklch(93% 0.045 285);
+  --secondary-foreground: oklch(32% 0.1 285);
+  --muted: oklch(95% 0.018 88);
+  --muted-foreground: oklch(48% 0.035 265);
+  --accent: oklch(52% 0.14 195);
+  --accent-foreground: oklch(99% 0.005 88);
+  --destructive: oklch(55% 0.22 25);
+  --destructive-foreground: oklch(99% 0.005 88);
+  --border: oklch(89% 0.025 88);
+  --input: oklch(92% 0.02 88);
+  --ring: oklch(58% 0.2 25);
+  --radius: 0.5rem;
+
+  /* Comparison column accents */
+  --compare-1: oklch(55% 0.18 285);
+  --compare-1-bg: oklch(95.5% 0.045 285);
+  --compare-1-fg: oklch(32% 0.12 285);
+  --compare-2: oklch(58% 0.2 25);
+  --compare-2-bg: oklch(95.5% 0.04 25);
+  --compare-2-fg: oklch(35% 0.12 25);
+  --compare-3: oklch(52% 0.15 165);
+  --compare-3-bg: oklch(95.5% 0.04 165);
+  --compare-3-fg: oklch(30% 0.1 165);
+
+  /* Semantic highlights */
+  --success: oklch(48% 0.14 155);
+  --success-bg: oklch(93% 0.06 155);
+  --success-fg: oklch(30% 0.1 155);
+  --warning: oklch(62% 0.16 75);
+  --warning-bg: oklch(94% 0.06 75);
+  --warning-fg: oklch(35% 0.1 75);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -20,6 +63,21 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-compare-1: var(--compare-1);
+  --color-compare-1-bg: var(--compare-1-bg);
+  --color-compare-1-fg: var(--compare-1-fg);
+  --color-compare-2: var(--compare-2);
+  --color-compare-2-bg: var(--compare-2-bg);
+  --color-compare-2-fg: var(--compare-2-fg);
+  --color-compare-3: var(--compare-3);
+  --color-compare-3-bg: var(--compare-3-bg);
+  --color-compare-3-fg: var(--compare-3-fg);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-success-fg: var(--success-fg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-fg: var(--warning-fg);
   --font-sans: var(--font-editorial-sans, ui-sans-serif, system-ui, sans-serif);
   --font-mono: var(--font-editorial-mono, ui-monospace, "SFMono-Regular", monospace);
   --radius-sm: calc(var(--radius) - 2px);

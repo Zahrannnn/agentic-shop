@@ -5,7 +5,6 @@ import { transcriptCleared } from "./transcript-slice";
 import {
   SESSION_STORAGE_KEY,
   loadInitialSessionState,
-  markSessionLive,
   persistSessionMiddleware,
   resetSessionExpired,
   selectSessionId,
@@ -36,13 +35,6 @@ describe("session reducers", () => {
     const after = sessionReducer(before, startNewSession());
     expect(after.sessionId).toMatch(UUID_PATTERN);
     expect(after.sessionId).not.toBe(before.sessionId);
-    expect(after.live).toBe(true);
-  });
-
-  it("markSessionLive re-asserts the existing id as live", () => {
-    const before: SessionState = { sessionId: "sess-existing-1", live: false };
-    const after = sessionReducer(before, markSessionLive());
-    expect(after.sessionId).toBe("sess-existing-1");
     expect(after.live).toBe(true);
   });
 
@@ -92,20 +84,6 @@ describe("sessionStorage persistence", () => {
     expect(raw).not.toBeNull();
     expect(JSON.parse(raw as string)).toEqual(store.getState().agentSession);
     expect(store.getState().agentSession.live).toBe(true);
-  });
-
-  it("updates the snapshot on markSessionLive", () => {
-    const store = createTestStore();
-    window.sessionStorage.setItem(
-      SESSION_STORAGE_KEY,
-      JSON.stringify({ sessionId: store.getState().agentSession.sessionId, live: false }),
-    );
-    store.dispatch(markSessionLive());
-
-    const persisted: unknown = JSON.parse(
-      window.sessionStorage.getItem(SESSION_STORAGE_KEY) as string,
-    );
-    expect(persisted).toEqual({ sessionId: store.getState().agentSession.sessionId, live: true });
   });
 
   it("does not write on foreign actions", () => {

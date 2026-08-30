@@ -24,6 +24,12 @@ export type ProductGridComponentProps = {
 
 const rankLabel = (index: number): string => String(index + 1).padStart(2, "0");
 
+const RANK_ACCENT = [
+  "bg-compare-1 text-white",
+  "bg-compare-2 text-white",
+  "bg-compare-3 text-white",
+] as const;
+
 /** Per-card dispatch: grid-level actions carry no productId (the wire
  * contract defines them once per grid), so the card that was clicked stamps
  * its own product into the payload before the action reaches the agent. */
@@ -52,13 +58,21 @@ export function ProductGrid({ props, actions, onAction }: ProductGridComponentPr
               key={productId}
               data-testid="product-card"
               data-product-id={productId}
-              className="flex flex-col gap-3 rounded-lg border bg-card p-4"
+              className={cn(
+                "flex flex-col gap-3 rounded-lg border bg-card p-4 transition-colors",
+                recommended && "border-primary/40 bg-primary/[0.03] shadow-sm",
+              )}
             >
               <div className="flex items-center justify-between">
                 {props.ranked ? (
-                  <p className="text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
+                  <span
+                    className={cn(
+                      "inline-flex size-7 items-center justify-center rounded-md text-xs font-semibold tabular-nums",
+                      RANK_ACCENT[index % RANK_ACCENT.length],
+                    )}
+                  >
                     {rankLabel(index)}
-                  </p>
+                  </span>
                 ) : (
                   <span />
                 )}

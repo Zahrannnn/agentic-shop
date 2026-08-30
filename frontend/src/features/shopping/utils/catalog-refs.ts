@@ -45,7 +45,6 @@ export const CATALOG_IDS: ReadonlySet<string> = new Set([
 ]);
 
 // Name used by specs/002-frontend-ui-renderer/data-model.md for the same set.
-export const CATALOG_PRODUCT_IDS: ReadonlySet<string> = CATALOG_IDS;
 
 // Whitelist a `comparison_table` may reference for its columns: catalog spec
 // attributes plus review-score dimensions.
