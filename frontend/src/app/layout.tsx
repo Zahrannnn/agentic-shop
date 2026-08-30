@@ -31,7 +31,8 @@ export const metadata: Metadata = {
   openGraph: {
     title: env.NEXT_PUBLIC_APP_NAME,
     description:
-      "A feature-first Next.js starter for CORELIA product applications.",
+      "Chat with a shopping agent that searches the catalog, compares the " +
+      "field, and commits to a pick with its reasons.",
     type: "website",
   },
   robots: {

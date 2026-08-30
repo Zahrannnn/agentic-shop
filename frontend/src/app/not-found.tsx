@@ -8,7 +8,7 @@ export default function NotFound() {
     <main className="flex min-h-screen items-center justify-center p-6">
       <EmptyState
         title="Page not found"
-        description="The route does not exist in this boilerplate."
+        description="This route does not exist."
         action={
           <Button asChild>
             <Link href={routes.shop}>Back to the shop</Link>
