@@ -1,7 +1,48 @@
-<!-- SEED: re-run /impeccable document once there's code to capture the actual tokens and components. -->
 ---
 name: agentic-shop Design System
 description: Confident-curator shopping UI — restrained paper surface, teal-ink accent, editorial precision.
+colors:
+  paper: "oklch(97% 0.006 200)"
+  desk: "oklch(94.5% 0.008 200)"
+  ink: "oklch(25% 0.012 200)"
+  pencil: "oklch(48% 0.015 200)"
+  hairline: "oklch(91% 0.008 200)"
+  teal-ink: "oklch(45% 0.08 200)"
+typography:
+  display:
+    fontFamily: "Space Grotesk, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "1.5rem"
+    fontWeight: 600
+    lineHeight: 1.15
+    letterSpacing: "-0.01em"
+  body:
+    fontFamily: "Space Grotesk, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "0.9375rem"
+    fontWeight: 400
+    lineHeight: 1.6
+  label:
+    fontFamily: "IBM Plex Mono, ui-monospace, monospace"
+    fontSize: "0.75rem"
+    fontWeight: 500
+    letterSpacing: "0.05em"
+rounded:
+  sm: "0.25rem"
+  md: "0.375rem"
+  lg: "0.625rem"
+spacing:
+  sm: "0.5rem"
+  md: "1rem"
+  lg: "1.5rem"
+components:
+  button-primary:
+    backgroundColor: "{colors.teal-ink}"
+    textColor: "{colors.paper}"
+    rounded: "{rounded.md}"
+    padding: "0.5rem 1rem"
+  card:
+    backgroundColor: "{colors.paper}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.lg}"
 ---
 
 # Design System: agentic-shop
@@ -90,8 +131,17 @@ genuinely floats above the page (overlay layer), never for hover decoration.
 
 ## 5. Components
 
-Omitted in seed mode — no components exist yet. This section will be populated by
-re-running `/impeccable document` after the first renderer components land.
+The renderer registry ships six plan-driven components (shadcn primitives on the
+tokens above): product cards (name, tabular price, ANC badge, provenance id,
+Details/Add-to-cart), preference chips, the comparison table (uppercase Label row
+headers, tabular mono values), product detail cards, cart tables with a TOTAL footer
+row, and quiet text panels. Plan actions render as outline buttons; the single
+primary (Teal Ink) control per view is the agent's commitment or the composer's Send.
+
+The transcript chrome: a sticky full-width header (wordmark, Browse-catalog, mode
+badge), a sticky full-width composer bar, thinking skeletons (three Skeleton lines
+under a "Thinking… Ns" timer with reassurance rotation), and plan skeletons while a
+plan document is incoming.
 
 ## 6. Do's and Don'ts
 
