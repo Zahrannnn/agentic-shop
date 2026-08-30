@@ -105,7 +105,7 @@ const AMENDED_CART_PLAN = {
 };
 
 const SESSION_EXPIRED_MESSAGE =
-  "Session expired — starting a fresh conversation.";
+  "Session expired. Starting a fresh conversation.";
 const TURN_IN_FLIGHT_MESSAGE =
   "Another reply is still in progress. Please wait for it to finish.";
 

@@ -1,13 +1,16 @@
 ---
 name: agentic-shop Design System
-description: Confident-curator shopping UI — restrained paper surface, teal-ink accent, editorial precision.
+description: Confident-curator shopping UI — restrained paper surface, coral accent, editorial precision.
 colors:
-  paper: "oklch(97% 0.006 200)"
-  desk: "oklch(94.5% 0.008 200)"
-  ink: "oklch(25% 0.012 200)"
-  pencil: "oklch(48% 0.015 200)"
-  hairline: "oklch(91% 0.008 200)"
-  teal-ink: "oklch(45% 0.08 200)"
+  cream: "oklch(98% 0.014 88)"
+  card: "oklch(99.5% 0.01 88)"
+  ink: "oklch(22% 0.03 265)"
+  pencil: "oklch(48% 0.035 265)"
+  hairline: "oklch(95% 0.018 88)"
+  coral: "oklch(58% 0.2 25)"
+  lavender-wash: "oklch(93% 0.045 285)"
+  teal-quiet: "oklch(52% 0.14 195)"
+typography:
 typography:
   display:
     fontFamily: "Space Grotesk, ui-sans-serif, system-ui, sans-serif"
@@ -35,7 +38,7 @@ spacing:
   lg: "1.5rem"
 components:
   button-primary:
-    backgroundColor: "{colors.teal-ink}"
+    backgroundColor: "{colors.coral}"
     textColor: "{colors.paper}"
     rounded: "{rounded.md}"
     padding: "0.5rem 1rem"
@@ -53,7 +56,7 @@ components:
 
 A personal shopper's desk the evening before a flight: warm paper surface, decisive
 ink, and exactly one recommendation underlined. The system is built on **restraint as
-confidence** — tinted neutrals carry the surface, a single teal-ink accent marks where
+confidence** — tinted neutrals carry the surface, a single coral accent marks where
 the agent commits, and typography does the persuasion. Whitespace is generous; density
 is earned by content, not imposed by chrome.
 
@@ -65,7 +68,7 @@ rejects decoration that doesn't carry information.
 
 **Key Characteristics:**
 - Paper-first light surface; ink-weight contrast instead of color contrast
-- One teal-ink accent, spent only where the agent commits
+- One coral accent, spent only where the agent commits
 - Editorial scale jumps (≥1.25 ratio) over many same-weight steps
 - Hairline borders and tonal steps for depth; shadows reserved for true overlays
 - Ease-out micro-transitions only; nothing bounces, nothing glows
@@ -73,21 +76,21 @@ rejects decoration that doesn't carry information.
 ## 2. Colors
 
 Strategy: **Restrained** — tinted neutrals plus one accent under 10% of any screen.
-Neutrals are tinted toward the teal-ink hue (chroma ≈ 0.005–0.01) so the whole surface
+Neutrals are tinted toward the warm cream family so the whole surface
 belongs to one family.
 
 ### Primary
-- **Teal Ink** (`[hex to be resolved during implementation]`, target oklch ≈ 45% chroma 0.08, hue ≈ 200): the agent's voice made visible — recommended pick's underline, primary action, active chip, focus rings. If it appears twice on one screen without a second commitment, that's already too much.
+- **Coral** (oklch(58% 0.2 25)): the agent's voice made visible — the REAL/MOCK commitment badge, primary actions, focus rings. If it appears twice on one screen without a second commitment, that's already too much.
 
 ### Neutral
-- **Paper** (`[to be resolved]`, target oklch ≈ 97% chroma 0.006 hue 200): page background; slightly warm, never pure white.
-- **Desk** (`[to be resolved]`, one tone below Paper): recessed areas — input field fill, code/attribute blocks.
-- **Ink** (`[to be resolved]`, target oklch ≈ 25% chroma 0.01 hue 200): primary text. Never pure black.
-- **Pencil** (`[to be resolved]`, mid tone): secondary text, metadata, timestamps.
-- **Hairline** (`[to be resolved]`, one tone below Paper on the border side): all borders and dividers.
+- **Cream** (oklch(98% 0.014 88)): page background; warm, never pure white.
+- **Card** (oklch(99.5% 0.01 88)): raised surfaces one step above Cream.
+- **Ink** (oklch(22% 0.03 265)): primary text. Never pure black.
+- **Pencil** (oklch(48% 0.035 265)): secondary text, metadata, timestamps.
+- **Hairline / Muted** (oklch(95% 0.018 88)): all borders, dividers, recessed fills.
 
 ### Named Rules
-**The One Underline Rule.** The teal-ink accent marks the agent's commitment — the
+**The One Underline Rule.** The coral accent marks the agent's commitment — the
 recommended pick, the single primary action. Rarity is the point; on any screen it
 covers under 10% of pixels.
 
@@ -123,7 +126,7 @@ comparison columns align; never proportionals in a table.
 Flat by default. Depth comes from tonal steps (Paper vs Desk) and hairline borders,
 never from resting shadows. A single low-alpha shadow vocabulary exists for true
 overlays only (dialog, popover): `0 8px 32px rgba(ink, 0.08–0.12)`. Focus is always a
-2px teal-ink ring at 2px offset, never a glow.
+2px coral ring at 2px offset, never a glow.
 
 ### Named Rules
 **The Paper Rule.** Surfaces are flat at rest. Shadows appear only when an element
@@ -159,4 +162,4 @@ plan document is incoming.
 - **Don't** build the hero-metric template (big number + small label + gradient accent) anywhere in the UI.
 - **Don't** render identical same-sized card grids with icon + heading + text; the comparison table and ranked grid earn their differences.
 - **Don't** reach for a modal first; inline and progressive disclosure come first (dialogs are for true interruptions only).
-- **Don't** use pure `#000`/`#fff`, and don't introduce a second accent hue; the palette is teal-ink plus tinted neutrals, full stop.
+- **Don't** use pure `#000`/`#fff`, and don't introduce a second accent hue; the palette is coral plus tinted neutrals, full stop.

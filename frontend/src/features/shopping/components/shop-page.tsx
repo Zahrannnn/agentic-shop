@@ -252,7 +252,7 @@ export function ShopPage() {
                 role="status"
                 className="text-sm leading-[1.6] text-muted-foreground"
               >
-                Session expired — starting a fresh conversation.
+                Session expired. Starting a fresh conversation.
               </p>
               <button
                 type="button"
