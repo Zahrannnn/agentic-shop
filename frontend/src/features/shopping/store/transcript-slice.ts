@@ -149,6 +149,39 @@ export const transcriptSlice = createSlice({
       turn.planState = "rendered";
     },
     /**
+     * Bounded amendment (D2 amendment): a `cart_view` plan carrying
+     * `amendsTurnId` supersedes the referenced turn's plan IN PLACE — the
+     * cart region stays a single authoritative section instead of stacking a
+     * duplicate table. The referenced turn is found by its CURRENT stored
+     * plan's `turnId` (each plan envelope carries its turn's id); its
+     * planState stays "rendered". The CURRENT (mutation) turn keeps NO plan —
+     * it renders its confirmation prose only. When no turn's plan matches
+     * (e.g. after a reload), the behavior falls back to `planReceived` on
+     * the current turn. Terminals and phase are never touched.
+     */
+    planAmended: (
+      state,
+      action: PayloadAction<{ amendsTurnId: number; plan: unknown }>,
+    ) => {
+      const current = currentTurn(state);
+      if (!current || current.terminal !== null) {
+        return;
+      }
+      const { amendsTurnId, plan } = action.payload;
+      const anchor = state.turns.find(
+        (turn) =>
+          (turn.plan as { turnId?: number } | null | undefined)?.turnId ===
+          amendsTurnId,
+      );
+      if (!anchor) {
+        current.plan = plan;
+        current.planState = "rendered";
+        return;
+      }
+      anchor.plan = plan;
+      anchor.planState = "rendered";
+    },
+    /**
      * The validation gate rejected a `ui_update`: record the invalid state and
      * a terminal `structured_output` error for the turn. The phase is not
      * changed here — the stream still runs to its real terminator, which
@@ -211,6 +244,7 @@ export const {
   stageProgress,
   deltaAppended,
   planReceived,
+  planAmended,
   planInvalid,
   turnEnded,
   turnFailed,

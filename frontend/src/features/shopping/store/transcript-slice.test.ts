@@ -4,6 +4,7 @@ import {
   STAGE_ORDER,
   deltaAppended,
   phaseSetIdle,
+  planAmended,
   planInvalid,
   planReceived,
   selectCurrentTurn,
@@ -224,6 +225,120 @@ describe("transcriptCleared", () => {
     state = transcriptReducer(state, transcriptCleared());
     state = transcriptReducer(state, turnStarted({ userText: "fresh start" }));
     expect(currentTurn(state).id).toBe(1);
+  });
+});
+
+describe("planAmended (D2 amendment: bounded cart plan patching)", () => {
+  const CART_PLAN_TURN_1 = {
+    planVersion: "1",
+    sessionId: "sess-1",
+    turnId: 1,
+    root: {
+      type: "cart_view",
+      props: { items: [], totalUsd: 0 },
+      actions: [],
+    },
+  };
+  const AMENDED_CART_PLAN = {
+    planVersion: "1",
+    sessionId: "sess-1",
+    turnId: 2,
+    amendsTurnId: 1,
+    root: {
+      type: "cart_view",
+      props: {
+        items: [{ productId: "aurora-hush-pro", quantity: 1 }],
+        totalUsd: 179,
+      },
+      actions: [],
+    },
+  };
+
+  /** Turn 1 rendered the anchored cart plan; turn 2 is the live mutation. */
+  function withCartTranscript(): TranscriptState {
+    return {
+      phase: "streaming",
+      turns: [
+        {
+          id: 1,
+          userText: "recommend headphones",
+          sentAction: null,
+          stages: [],
+          deltas: "Here is my pick.",
+          plan: CART_PLAN_TURN_1,
+          planState: "rendered",
+          terminal: { kind: "turn_end" },
+        },
+        {
+          id: 2,
+          userText: null,
+          sentAction: {
+            type: "add_to_cart",
+            label: "Add to cart",
+            payload: { productId: "aurora-hush-pro" },
+          },
+          stages: [],
+          deltas: "Added to your cart.",
+          plan: null,
+          planState: "none",
+          terminal: null,
+        },
+      ],
+    };
+  }
+
+  it("replaces the referenced turn's plan in place and keeps the current turn prose-only", () => {
+    let state = withCartTranscript();
+    state = transcriptReducer(
+      state,
+      planAmended({ amendsTurnId: 1, plan: AMENDED_CART_PLAN }),
+    );
+
+    // The anchored turn carries the superseding plan, still "rendered".
+    expect(state.turns[0].plan).toEqual(AMENDED_CART_PLAN);
+    expect(state.turns[0].planState).toBe("rendered");
+    // The mutation turn gets NO plan — confirmation prose only.
+    const current = currentTurn(state);
+    expect(current.plan).toBeNull();
+    expect(current.planState).toBe("none");
+    // Terminals and phase are untouched.
+    expect(state.turns[0].terminal).toEqual({ kind: "turn_end" });
+    expect(current.terminal).toBeNull();
+    expect(state.phase).toBe("streaming");
+  });
+
+  it("matches on the stored plan's turnId field, not the turn id", () => {
+    // The stored plan envelope's turnId (4) differs from the turn id (1).
+    const state0 = withCartTranscript();
+    state0.turns[0].plan = { ...CART_PLAN_TURN_1, turnId: 4 };
+    const state = transcriptReducer(
+      state0,
+      planAmended({ amendsTurnId: 4, plan: AMENDED_CART_PLAN }),
+    );
+    expect(state.turns[0].plan).toEqual(AMENDED_CART_PLAN);
+    expect(currentTurn(state).plan).toBeNull();
+  });
+
+  it("falls back to planReceived on the current turn when no plan matches", () => {
+    let state = withTurn({ deltas: "Added to your cart." });
+    state = transcriptReducer(
+      state,
+      planAmended({ amendsTurnId: 9, plan: AMENDED_CART_PLAN }),
+    );
+    expect(currentTurn(state).plan).toEqual(AMENDED_CART_PLAN);
+    expect(currentTurn(state).planState).toBe("rendered");
+    expect(state.phase).toBe("streaming");
+  });
+
+  it("is ignored once a terminal outcome is recorded on the current turn", () => {
+    const state0 = withCartTranscript();
+    state0.turns[1].terminal = ERROR_TERMINAL;
+    const state = transcriptReducer(
+      state0,
+      planAmended({ amendsTurnId: 1, plan: AMENDED_CART_PLAN }),
+    );
+    expect(state.turns[0].plan).toEqual(CART_PLAN_TURN_1);
+    expect(currentTurn(state).plan).toBeNull();
   });
 });
 

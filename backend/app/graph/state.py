@@ -43,6 +43,12 @@ Other keys:
   layer omits ``turn_end`` (the already-emitted ``error`` frame is terminal).
 * ``turn_id`` — count of completed plan turns; ``ui_plan`` stamps
   ``turn_id + 1`` into the new plan envelope (no wall clock — determinism).
+* ``cart_plan_turn_id`` — the ``turnId`` of the FIRST ``cart_view`` plan a
+  cart mutation emitted in this session (D2 amendment anchor). Set once, by
+  ``_build_followup_plan``, and never overwritten: every later cart turn
+  stamps ``amendsTurnId`` with it so the client updates that one cart region
+  in place instead of appending duplicate cart sections. ``None`` until the
+  first cart mutation.
 """
 
 from __future__ import annotations
@@ -73,6 +79,7 @@ class ShoppingState(TypedDict, total=False):
     plan: dict[str, Any] | None
     cart: list[dict[str, Any]]
     turn_id: int
+    cart_plan_turn_id: int | None
 
     # -- failure signal ------------------------------------------------------
     error: dict[str, Any] | None

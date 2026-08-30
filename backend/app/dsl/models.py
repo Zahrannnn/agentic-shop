@@ -194,11 +194,20 @@ class ComponentNode(BaseModel):
 
 
 class UIPlan(BaseModel):
-    """Plan envelope (wire format): full replace every turn (D2)."""
+    """Plan envelope (wire format): full replace every turn (D2).
+
+    Bounded amendment exception (D2 amendment): a ``cart_view`` plan MAY carry
+    ``amends_turn_id`` — the ``turnId`` of the earlier cart plan turn it
+    supersedes in place. Everything else stays strict full-replace; catalog
+    rules in ``app.dsl.validate`` reject the field on any other root type.
+    Serialized with ``exclude_none=True``, so the field is simply absent from
+    the wire document when unset (the fixtures stay byte-identical).
+    """
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     plan_version: Literal["1"]
     session_id: str = Field(min_length=1)
     turn_id: int = Field(ge=1)
+    amends_turn_id: int | None = Field(default=None, ge=1)
     root: ComponentNode

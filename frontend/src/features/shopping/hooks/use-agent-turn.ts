@@ -16,6 +16,7 @@ import {
   STAGE_ORDER,
   deltaAppended,
   phaseSetIdle,
+  planAmended,
   planInvalid,
   planReceived,
   resetSessionExpired,
@@ -143,11 +144,23 @@ export function useAgentTurn() {
           onPlan: (raw) => {
             // Validation gate before the store: invalid plans never render.
             const result = parseUiPlan(raw, CATALOG_IDS);
-            if (result.ok) {
-              dispatch(planReceived(result.plan));
-            } else {
+            if (!result.ok) {
               dispatch(planInvalid(result.errors));
+              return;
             }
+            if (result.plan.amendsTurnId != null) {
+              // Bounded amendment (D2 amendment): a cart plan superseding an
+              // earlier cart turn updates THAT turn's plan region in place —
+              // the current mutation turn stays prose-only.
+              dispatch(
+                planAmended({
+                  amendsTurnId: result.plan.amendsTurnId,
+                  plan: result.plan,
+                }),
+              );
+              return;
+            }
+            dispatch(planReceived(result.plan));
           },
           onTurnEnd: () => {
             markTerminated();

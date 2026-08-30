@@ -138,6 +138,17 @@ def _validate_props_product_ids(props: Any, valid_product_ids: set[str]) -> list
     return errors
 
 
+def _validate_amendment(plan: UIPlan) -> list[str]:
+    """Bounded amendment rule (D2 amendment): only ``cart_view`` roots may
+    carry ``amendsTurnId`` in the MVP — everything else is strict full-replace.
+
+    Presence/type (optional int ≥ 1) is enforced by the Pydantic envelope;
+    this adds the MVP scope check Pydantic cannot express."""
+    if plan.amends_turn_id is not None and plan.root.type != "cart_view":
+        return [f"amendsTurnId is only allowed on cart_view plans (MVP), not on {plan.root.type!r}"]
+    return []
+
+
 def validate_plan(plan: UIPlan, valid_product_ids: set[str]) -> UIPlan:
     """Run all catalog-aware checks against ``plan``.
 
@@ -154,6 +165,7 @@ def validate_plan(plan: UIPlan, valid_product_ids: set[str]) -> UIPlan:
     """
     errors: list[str] = []
     node = plan.root
+    errors.extend(_validate_amendment(plan))
     errors.extend(_validate_actions(node, valid_product_ids))
     errors.extend(_validate_props_product_ids(node.props, valid_product_ids))
     if isinstance(node.props, PreferencePickerProps):

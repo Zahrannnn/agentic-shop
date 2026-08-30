@@ -82,6 +82,28 @@ const INVALID_PLAN = {
   root: { type: "hypno_grid", props: {}, actions: [] },
 };
 
+/** A cart plan superseding turn 1's plan in place (D2 amendment). */
+const AMENDED_CART_PLAN = {
+  planVersion: "1",
+  sessionId: "demo-12345",
+  turnId: 2,
+  amendsTurnId: 1,
+  root: {
+    type: "cart_view",
+    props: {
+      items: [{ productId: "aurora-hush-pro", quantity: 1 }],
+      totalUsd: 179,
+    },
+    actions: [
+      {
+        type: "remove_from_cart",
+        label: "Remove",
+        payload: { productId: "aurora-hush-pro" },
+      },
+    ],
+  },
+};
+
 const SESSION_EXPIRED_MESSAGE =
   "Session expired — starting a fresh conversation.";
 const TURN_IN_FLIGHT_MESSAGE =
@@ -281,6 +303,54 @@ describe("useAgentTurn", () => {
     expect(turn.planState).toBe("none");
     expect(turn.stages).toEqual([]);
     expect(store.getState().agentSession.live).toBe(true);
+  });
+
+  it("routes an amendsTurnId plan onto the referenced turn and keeps the mutation turn prose-only", async () => {
+    const { result } = renderTurnHook();
+
+    // Turn 1: a normal plan — becomes the amendment anchor.
+    fetchMock.mockResolvedValueOnce(
+      sseResponse([
+        frame("message_delta", { text: "Here are my picks." }),
+        frame("ui_update", VALID_PLAN),
+        frame("turn_end", {}),
+      ]),
+    );
+    await act(async () => {
+      await result.current.send({ message: "recommend headphones" });
+    });
+
+    // Turn 2: the add-to-cart mutation streams a plan carrying amendsTurnId.
+    fetchMock.mockResolvedValueOnce(
+      sseResponse([
+        frame("message_delta", { text: "Added to your cart." }),
+        frame("ui_update", AMENDED_CART_PLAN),
+        frame("turn_end", {}),
+      ]),
+    );
+    await act(async () => {
+      await result.current.send({
+        uiAction: {
+          type: "add_to_cart",
+          label: "Add to cart",
+          payload: { productId: "aurora-hush-pro" },
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.phase).toBe("idle");
+    });
+    const turns = result.current.turns;
+    expect(turns).toHaveLength(2);
+    // The ANCHOR turn's plan was replaced in place, still "rendered".
+    expect(turns[0].planState).toBe("rendered");
+    expect(turns[0].plan).toEqual(AMENDED_CART_PLAN);
+    // The mutation turn kept no plan — confirmation prose only.
+    expect(turns[1].planState).toBe("none");
+    expect(turns[1].plan).toBeNull();
+    expect(turns[1].deltas).toBe("Added to your cart.");
+    expect(turns[1].terminal).toEqual({ kind: "turn_end" });
   });
 
   it("marks an invalid plan structured_output-invalid and keeps reading to turn_end", async () => {

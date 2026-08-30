@@ -166,6 +166,13 @@ export const uiPlanSchema = z.object({
   planVersion: z.literal("1"),
   sessionId: z.string().min(1),
   turnId: z.number().int().min(1),
+  /**
+   * Bounded amendment (D2 amendment): a `cart_view` plan may point at the
+   * earlier cart plan turn it supersedes — the client replaces THAT turn's
+   * plan region in place instead of appending a duplicate cart section.
+   * Absent on every strictly full-replace plan (the fixtures).
+   */
+  amendsTurnId: z.number().int().min(1).optional(),
   root: planComponentSchema,
 });
 

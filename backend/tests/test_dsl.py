@@ -165,3 +165,41 @@ def test_validation_error_lists_every_violation() -> None:
     message = str(exc_info.value)
     assert "nope-one" in message and "nope-two" in message
     assert "not allowed" in message
+
+
+# ---------------------------------------------------------------------------
+# Bounded amendment (D2 amendment): optional amendsTurnId, cart_view only
+# ---------------------------------------------------------------------------
+
+
+def test_amends_turn_id_is_accepted_on_cart_view_and_serialized() -> None:
+    doc = _fixture_dict("cart-one-item.json")
+    doc["amendsTurnId"] = 2
+    plan = UIPlan.model_validate(doc)
+    validate_plan(plan, _catalog_ids())
+    assert plan.amends_turn_id == 2
+    serialized = serialize_plan(plan)
+    assert serialized["amendsTurnId"] == 2
+    assert UIPlan.model_validate(serialized) == plan
+
+
+def test_amends_turn_id_zero_is_rejected() -> None:
+    doc = _fixture_dict("cart-one-item.json")
+    doc["amendsTurnId"] = 0
+    with pytest.raises(ValidationError):
+        UIPlan.model_validate(doc)
+
+
+def test_amends_turn_id_on_non_cart_view_is_rejected() -> None:
+    """The bounded amendment is cart_view-only in the MVP (full-replace D2)."""
+    doc = _fixture_dict("product-grid-flights.json")
+    doc["amendsTurnId"] = 1
+    plan = UIPlan.model_validate(doc)  # structurally fine (int >= 1)...
+    with pytest.raises(PlanValidationError, match="only allowed on cart_view"):
+        validate_plan(plan, _catalog_ids())  # ...the catalog rule rejects it
+
+
+def test_fixtures_stay_non_amending() -> None:
+    """The fixture corpus predates the amendment and carries no amendsTurnId."""
+    for path in FIXTURE_FILES:
+        assert "amendsTurnId" not in json.loads(path.read_text(encoding="utf-8"))

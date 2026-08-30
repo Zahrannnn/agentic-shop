@@ -82,6 +82,7 @@ from app.tools.search import SearchFilters, relax_filters, search_products
 __all__ = [
     "ASK_QUESTION",
     "COMPARISON_ATTRIBUTES",
+    "DEFAULT_BUDGETS",
     "DEFAULT_BUDGET_USD",
     "FOLLOWUP_ACTION_TYPES",
     "FollowUp",
@@ -103,11 +104,18 @@ __all__ = [
 #: Custom stream payload: ``(kind, data)`` translated 1:1 into an SSE frame.
 StreamPayload = tuple[str, Any]
 
-#: How many candidates the research node digests (bounded work at 28 items).
+#: How many candidates the research node digests (bounded work at 38 items).
 RESEARCH_TOP_N: int = 6
 
-#: Budget cap applied (and disclosed) when the shopper states no budget (R7,
-#: US2 scenario 3). Module constant so tests can pin the exact assumption.
+#: Budget caps applied (and disclosed) when the shopper states no budget (R7,
+#: US2 scenario 3; D5 amendment: the catalog carries multiple categories, and
+#: a sensible default differs per category — earbuds run far cheaper than
+#: over-ear headphones). Module constant so tests can pin the exact table.
+DEFAULT_BUDGETS: dict[str, float] = {"headphones": 250.0, "earbuds": 150.0}
+
+#: Fallback cap for a category with no entry in :data:`DEFAULT_BUDGETS` (or no
+#: category at all, i.e. the whole catalog is in play). Module constant so
+#: tests can pin the exact assumption.
 DEFAULT_BUDGET_USD: float = 250.0
 
 #: The clarify question — the picker plan's ``question`` prop (US2 / fixture
@@ -623,8 +631,9 @@ def search_node(state: ShoppingState) -> dict[str, Any]:
 
     Proceed-path policies (R7, US2), all deterministic:
 
-    * missing budget → the :data:`DEFAULT_BUDGET_USD` cap is applied and
-      disclosed as an assumption (never a question);
+    * missing budget → the per-category :data:`DEFAULT_BUDGETS` cap (or the
+      :data:`DEFAULT_BUDGET_USD` fallback for unknown/missing categories) is
+      applied and disclosed as an assumption (never a question);
     * hard attribute demands (battery hours / codecs) that no product in the
       category satisfies at ANY price → ``flag_contradiction`` + closest
       matches from the full category set (or whole catalog when the category
@@ -647,11 +656,11 @@ def search_node(state: ShoppingState) -> dict[str, Any]:
 
     budget = _coerce_float(intent.get("budget_usd"))
     if budget is None or budget <= 0:
-        budget = DEFAULT_BUDGET_USD
+        budget = DEFAULT_BUDGETS.get(category_key, DEFAULT_BUDGET_USD)
         intent["budget_usd"] = budget
         _add_assumption(
             intent,
-            f"No budget given — using {_fmt_price(DEFAULT_BUDGET_USD)} as a sensible cap "
+            f"No budget given — using {_fmt_price(budget)} as a sensible cap "
             f"for {category_key or 'your search'}.",
         )
 
@@ -825,12 +834,18 @@ def _rank_order_targets(state: ShoppingState, targets: tuple[str, ...]) -> list[
     return [pid for _index, pid in indexed]
 
 
-def _cart_view_plan(state: ShoppingState, cart: list[dict[str, Any]]) -> UIPlan:
+def _cart_view_plan(
+    state: ShoppingState,
+    cart: list[dict[str, Any]],
+    amends_turn_id: int | None = None,
+) -> UIPlan:
     """Deterministic ``cart_view`` plan: lines + catalog-priced total.
 
     Policy (mirrors the ``cart-one-item.json`` fixture): one
     ``remove_from_cart`` action per line while there are at most 3 lines,
-    none beyond that.
+    none beyond that. ``amends_turn_id`` (D2 amendment) is set only when the
+    session already has a cart region: the new plan then supersedes THAT
+    turn's plan in place instead of appending a duplicate cart section.
     """
     summary = get_cart(cart, get_catalog())
     lines = list(summary.lines)
@@ -840,8 +855,11 @@ def _cart_view_plan(state: ShoppingState, cart: list[dict[str, Any]]) -> UIPlan:
     ]
     if len(lines) > 3:
         actions = []
+    envelope = _envelope(state)
+    if amends_turn_id is not None:
+        envelope["amends_turn_id"] = amends_turn_id
     return UIPlan(
-        **_envelope(state),
+        **envelope,
         root=ComponentNode(
             type="cart_view",
             props=CartViewProps(
@@ -873,8 +891,10 @@ def _build_followup_plan(
     involved: the component kind was already fixed by
     :func:`app.graph.followups.resolve_followup`, so there is nothing left for
     a model to choose. Returns ``(plan, extra_state_update)`` where the extra
-    covers ``selected_ids`` and cart mutations (performed via the pure tools
-    in ``app.tools.cart``)."""
+    covers ``selected_ids``, cart mutations (performed via the pure tools in
+    ``app.tools.cart``), and the D2 amendment anchor ``cart_plan_turn_id``
+    (stored on the FIRST cart mutation only, AFTER building — the anchor is
+    that turn's own id)."""
     kind = followup.get("kind")
     targets = tuple(pid for pid in (followup.get("product_ids") or []) if isinstance(pid, str))
     if kind == "disclosure":
@@ -933,7 +953,16 @@ def _build_followup_plan(
     elif kind == "remove_from_cart":
         cart = remove_from_cart(cart, get_catalog(), targets[0])
         extra = {"cart": cart}
-    return _cart_view_plan(state, cart), extra
+    # D2 amendment: every ``cart_view`` supersedes the anchored first cart
+    # plan in place via ``amendsTurnId``; only the FIRST cart mutation emits
+    # a standalone plan and records the anchor. The plan's own ``turnId``
+    # keeps incrementing normally — it identifies the turn, not the region.
+    anchor = state.get("cart_plan_turn_id")
+    if isinstance(anchor, int) and anchor >= 1:
+        return _cart_view_plan(state, cart, amends_turn_id=anchor), extra
+    plan = _cart_view_plan(state, cart)
+    extra["cart_plan_turn_id"] = plan.turn_id
+    return plan, extra
 
 
 def ui_plan_node(state: ShoppingState) -> dict[str, Any]:

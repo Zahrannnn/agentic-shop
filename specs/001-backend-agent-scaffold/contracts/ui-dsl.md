@@ -22,6 +22,19 @@ of the contract — the examples below are wire format.
 Full-replace rule (D2): every plan is standalone; a renderer MUST NOT need the
 previous plan to render a new one.
 
+**Bounded amendment (D2 amendment):** a `cart_view` plan MAY additionally
+carry `"amendsTurnId": <int ≥ 1>` — the `turnId` of the earlier cart plan turn
+it supersedes. A client that still shows that turn's plan MUST replace it in
+place (the cart region stays a single authoritative section) instead of
+appending a duplicate cart section; the amending turn itself renders its prose
+only (no plan of its own). The amending document keeps its own newer `turnId`
+— `turnId` identifies the turn, `amendsTurnId` points at the anchored region.
+If the referenced turn is unknown to the client (e.g. after a reload), it
+falls back to normal full-replace rendering of the amending plan. Every other
+component kind stays strictly full-replace: the backend rejects
+`amendsTurnId` on any non-`cart_view` root. The field is absent from the wire
+document when unset (fixtures stay non-amending).
+
 ## Component registry (MVP set) and props
 
 ### `product_grid`
@@ -101,6 +114,10 @@ Allowed action: `choose` (max one).
 
 ### `cart_view`
 
+`cart_view` is the only component that may carry the envelope's optional
+`amendsTurnId` (see "Plan envelope" above): the first cart mutation emits a
+standalone plan; every later cart turn supersedes that anchored plan in place.
+
 ```json
 {
   "type": "cart_view",
@@ -121,7 +138,8 @@ disclosures; no actions.
 
 ## Validation rules (enforced backend-side before `ui_update`; mirrored in Zod later)
 
-1. Envelope: `planVersion == "1"`; `sessionId` non-empty; `turnId` ≥ 1 int.
+1. Envelope: `planVersion == "1"`; `sessionId` non-empty; `turnId` ≥ 1 int;
+   optional `amendsTurnId` ≥ 1 int (`cart_view` roots only — D2 amendment).
 2. `root.type` ∈ registry; unknown type is invalid (never forward-compatible
    fallback rendering).
 3. Every `productId` referenced anywhere MUST exist in the catalog.

@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -14,6 +15,7 @@ beforeAll(() => {
 
 import { SESSION_STORAGE_KEY, type Turn } from "../store";
 import { ShopPage } from "./shop-page";
+import { reassuranceFor } from "./thinking-copy";
 
 /**
  * The hook module is mocked outright: the shell's contract is what
@@ -132,6 +134,25 @@ const PREFERENCE_PLAN = {
   },
 };
 
+/** The cart plan the second cart action amends (D2 amendment anchor). */
+const CART_PLAN_AMENDED = {
+  planVersion: "1",
+  sessionId: SESSION_ID,
+  turnId: 3,
+  amendsTurnId: 2,
+  root: {
+    type: "cart_view",
+    props: {
+      items: [
+        { productId: "aurora-hush-pro", quantity: 1 },
+        { productId: "cloudline-air", quantity: 1 },
+      ],
+      totalUsd: 318,
+    },
+    actions: [],
+  },
+};
+
 /** The composer textarea, addressed by its accessible label. */
 function composerBox(): HTMLTextAreaElement {
   return screen.getByRole(
@@ -198,6 +219,43 @@ describe("ShopPage transcript", () => {
     expect(follows(prose, plan)).toBe(true);
   });
 
+  it("amends the cart region in place: one cart section after two cart actions, prose-only mutation turn", () => {
+    // Post-amendment store state: the ANCHOR turn carries the superseding
+    // cart plan; the second (mutation) turn holds only its confirmation prose.
+    setHook({
+      turns: [
+        makeTurn({
+          id: 1,
+          userText: "recommend headphones",
+          deltas: "Here is my pick.",
+          planState: "rendered",
+          plan: CART_PLAN_AMENDED,
+          terminal: { kind: "turn_end" },
+        }),
+        makeTurn({
+          id: 2,
+          sentAction: {
+            type: "add_to_cart",
+            label: "Add to cart",
+            payload: { productId: "cloudline-air" },
+          },
+          deltas: "Added Cloudline Air to your cart.",
+          terminal: { kind: "turn_end" },
+        }),
+      ],
+    });
+    render(<ShopPage />);
+
+    // Exactly ONE cart region in the whole transcript — no stacked tables.
+    expect(screen.getAllByTestId("plan-cart_view")).toHaveLength(1);
+    // The single region shows the AMENDED contents (both lines, new total).
+    expect(screen.getByText("aurora-hush-pro")).toBeInTheDocument();
+    expect(screen.getByText("cloudline-air")).toBeInTheDocument();
+    expect(screen.getByText("$318.00")).toBeInTheDocument();
+    // The mutation turn shows its confirmation prose and no plan of its own.
+    expect(screen.getByText("Added Cloudline Air to your cart.")).toBeInTheDocument();
+  });
+
   it("shows a live region only on the last agent turn's prose", () => {
     setHook({
       turns: [
@@ -243,6 +301,12 @@ describe("ShopPage transcript", () => {
 });
 
 describe("ShopPage thinking states", () => {
+  // The elapsed-seconds tests fake timers; restoring here keeps the rest of
+  // the suite on real ones regardless of test order or early failure.
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("offers suggestion chips in the empty state and sends the prompt on click", () => {
     const send = vi.fn(
       async (): Promise<SendOutcomeLike> => ({ kind: "started" }),
@@ -282,8 +346,96 @@ describe("ShopPage thinking states", () => {
     const thinking = screen.getByTestId("turn-thinking");
     expect(thinking).toHaveAttribute("role", "status");
     expect(thinking).toHaveTextContent("Thinking…");
+    // The live counter starts at zero and the reassurance line opens the
+    // rotation in its first bucket.
+    expect(thinking).toHaveTextContent("Thinking… 0s");
+    expect(screen.getByTestId("turn-reassurance")).toHaveTextContent(
+      "Reading the catalog…",
+    );
     expect(thinking.querySelectorAll(".animate-pulse").length).toBeGreaterThan(0);
     expect(screen.queryByTestId("plan-skeleton")).not.toBeInTheDocument();
+  });
+
+  it("counts elapsed seconds live while the agent thinks", () => {
+    vi.useFakeTimers();
+    setHook({
+      phase: "streaming",
+      isBusy: true,
+      turns: [makeTurn({ id: 1, userText: "recommend headphones" })],
+    });
+    render(<ShopPage />);
+
+    expect(screen.getByTestId("turn-thinking")).toHaveTextContent(
+      "Thinking… 0s",
+    );
+
+    // Three 1s ticks — the counter tracks the elapsed seconds exactly.
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(screen.getByTestId("turn-thinking")).toHaveTextContent(
+      "Thinking… 3s",
+    );
+  });
+
+  it("rotates the reassurance line by elapsed bucket while thinking", () => {
+    vi.useFakeTimers();
+    setHook({
+      phase: "streaming",
+      isBusy: true,
+      turns: [makeTurn({ id: 1, userText: "recommend headphones" })],
+    });
+    render(<ShopPage />);
+
+    const reassurance = screen.getByTestId("turn-reassurance");
+    expect(reassurance).toHaveTextContent("Reading the catalog…");
+
+    // 8s crosses into the comparing bucket…
+    act(() => {
+      vi.advanceTimersByTime(8000);
+    });
+    expect(reassurance).toHaveTextContent(
+      "Comparing candidates on what matters to you…",
+    );
+
+    // …and 20s total into the long-wait bucket.
+    act(() => {
+      vi.advanceTimersByTime(12000);
+    });
+    expect(reassurance).toHaveTextContent(
+      "Taking the time to get this right…",
+    );
+  });
+
+  it("stops the counter when the thinking state unmounts", () => {
+    vi.useFakeTimers();
+    setHook({
+      phase: "streaming",
+      isBusy: true,
+      turns: [makeTurn({ id: 1, userText: "recommend headphones" })],
+    });
+    const { unmount } = render(<ShopPage />);
+
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    unmount();
+
+    // Prose arriving removes the thinking state; the interval is cleared with
+    // it, so further ticks must not throw on the unmounted component.
+    expect(() => {
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+    }).not.toThrow();
+    expect(screen.queryByTestId("turn-thinking")).not.toBeInTheDocument();
   });
 
   it("shows a plan skeleton once prose started and the plan has not landed", () => {
@@ -318,6 +470,23 @@ describe("ShopPage thinking states", () => {
     expect(screen.queryByTestId("turn-thinking")).not.toBeInTheDocument();
     expect(screen.queryByTestId("plan-skeleton")).not.toBeInTheDocument();
     expect(screen.getByTestId("plan-text_block")).toBeInTheDocument();
+  });
+});
+
+describe("reassuranceFor", () => {
+  // The bucket boundaries are part of the contract: 0–7 reading, 8–19
+  // comparing, 20+ long wait. Asserted at both edges of each bucket.
+  it("buckets the reassurance copy deterministically by elapsed seconds", () => {
+    expect(reassuranceFor(0)).toBe("Reading the catalog…");
+    expect(reassuranceFor(7)).toBe("Reading the catalog…");
+    expect(reassuranceFor(8)).toBe(
+      "Comparing candidates on what matters to you…",
+    );
+    expect(reassuranceFor(19)).toBe(
+      "Comparing candidates on what matters to you…",
+    );
+    expect(reassuranceFor(20)).toBe("Taking the time to get this right…");
+    expect(reassuranceFor(120)).toBe("Taking the time to get this right…");
   });
 });
 
