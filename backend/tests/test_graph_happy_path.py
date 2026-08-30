@@ -906,3 +906,53 @@ def test_exception_without_status_code_reraises_without_downgrade() -> None:
         call_structured(llm, PreferenceWeights, "weights please")
     assert llm.json_invocations == 0
     assert "fake-timeout" not in _JSON_MODE_MODELS
+
+
+def test_real_mode_streams_narration_tokens(monkeypatch):
+    """LLM_MODE=real streams the narration completion token-by-token (latency
+    UX): no structured Narration call, streamed text lands in the transcript."""
+    from types import SimpleNamespace
+
+    import app.graph.nodes as nodes
+    from app.ranking.scorer import ScoredProduct
+
+    class Chunk:
+        def __init__(self, piece: str) -> None:
+            self._piece = piece
+
+        @property
+        def text(self) -> str:
+            return self._piece
+
+    class StreamingFakeLLM:
+        def __init__(self) -> None:
+            self.stream_calls = 0
+
+        def stream(self, messages):  # noqa: ANN001
+            self.stream_calls += 1
+            return iter([Chunk("Aurora Hush Pro "), Chunk("is the pick.")])
+
+        def with_structured_output(self, schema):  # noqa: ANN001, ARG002
+            raise AssertionError("real narration must not use structured output")
+
+    fake = StreamingFakeLLM()
+    monkeypatch.setattr(nodes, "get_settings", lambda: SimpleNamespace(LLM_MODE="real"))
+    monkeypatch.setattr(nodes, "get_llm", lambda: fake)
+
+    product = next(p for p in nodes.get_catalog() if p.id == "aurora-hush-pro")
+    state = {
+        "pending_user_text": "headphones for flights under $200",
+        "messages": [],
+        "intent": {"budget_usd": 200.0, "assumptions": []},
+        "ranked": [
+            ScoredProduct(product_id=product.id, score=0.9, contributions={"anc": 0.45}, rank=1)
+        ],
+        "followup": None,
+        "error": None,
+    }
+
+    result = nodes.respond_node(state)
+
+    assert fake.stream_calls == 1
+    content = result["messages"][-1]["content"]
+    assert "Aurora Hush Pro is the pick." in content

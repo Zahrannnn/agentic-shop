@@ -48,6 +48,7 @@ from pydantic import ValidationError
 
 from app.catalog.loader import load_catalog
 from app.catalog.models import Product
+from app.config import get_settings
 from app.dsl.models import (
     CartLine,
     CartViewProps,
@@ -1117,6 +1118,48 @@ def _followup_narration(
     return f"Your cart: {items} — total {_fmt_price(summary.total_usd)}."
 
 
+def _stream_real_narration(state: ShoppingState, context_products: list[dict[str, Any]]) -> str:
+    """Real-mode narration: stream the model's answer token-by-token.
+
+    The facts (names, ids, computed highlights) travel in the prompt and the
+    model is instructed to use only those numbers, so the streamed prose stays
+    grounded while the shopper watches it arrive. Returns the full streamed
+    text; a deterministically composed fallback covers an empty stream.
+    """
+    facts = "; ".join(
+        f"{product['name']}: " + "; ".join(product["highlights"]) for product in context_products
+    )
+    system = (
+        "You are a confident shopping curator finishing a recommendation. "
+        "Write the shopper's answer in 2-4 short sentences. Use ONLY the "
+        "facts below - reuse every number verbatim, do not invent attributes, "
+        "prices, or products, and mention each product exactly once. End with "
+        "one short question inviting the next step. Facts: " + facts
+    )
+    prompt = _llm_messages(
+        system,
+        state.get("pending_user_text", ""),
+        {},
+    )
+    accumulated = ""
+    for chunk in get_llm().stream(prompt):
+        piece = getattr(chunk, "text", "") or ""
+        if not piece:
+            continue
+        accumulated += piece
+        _emit(("message_delta", {"text": piece}))
+    if accumulated.strip():
+        return accumulated
+    lines = []
+    for product in context_products:
+        highlight = product["highlights"][0] if product["highlights"] else "a strong match"
+        lines.append(f"{product['name']}: {highlight}.")
+    fallback = f"Here is what I found. {' '.join(lines)} Want me to compare any of these?"
+    for piece in _chunk_words(fallback):
+        _emit(("message_delta", {"text": piece}))
+    return fallback
+
+
 def respond_node(state: ShoppingState) -> dict[str, Any]:
     """Grounded narration streamed as word-paired ``message_delta`` chunks.
 
@@ -1150,6 +1193,19 @@ def respond_node(state: ShoppingState) -> dict[str, Any]:
                     "highlights": _highlights(product, scored, budget),
                 }
             )
+        if get_settings().LLM_MODE.strip().lower() == "real":
+            # Real mode streams the narration completion token-by-token: the
+            # shopper watches the answer arrive instead of waiting for the
+            # full generation (phase-2 latency UX). Grounding travels in the
+            # prompt as pre-computed facts (see _stream_real_narration).
+            text = _stream_real_narration(state, context_products)
+            assumptions = list((state.get("intent") or {}).get("assumptions") or [])
+            text = _assumption_note(assumptions) + text
+            messages = [
+                *state.get("messages", []),
+                {"role": "assistant", "content": text},
+            ]
+            return {"messages": messages}
         narration = call_structured(
             get_llm(),
             Narration,
