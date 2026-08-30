@@ -54,6 +54,7 @@ from app.dsl.models import (
     CartViewProps,
     ComparisonTableProps,
     ComponentNode,
+    GridProduct,
     PreferencePickerProps,
     ProductDetailsProps,
     ProductGridProps,
@@ -1018,6 +1019,16 @@ def ui_plan_node(state: ShoppingState) -> dict[str, Any]:
         else:
             # This wave renders a product grid for normal turns; follow-up
             # turns assemble the other registry types deterministically.
+            catalog_by_id = {p.id: p for p in get_catalog()}
+            grid_products = [
+                GridProduct(
+                    id=scored.product_id,
+                    name=catalog_by_id[scored.product_id].name,
+                    price_usd=catalog_by_id[scored.product_id].price_usd,
+                    anc_type=catalog_by_id[scored.product_id].anc_type,
+                )
+                for scored in top
+            ]
             plan = UIPlan(
                 **_envelope(state),
                 root=ComponentNode(
@@ -1026,6 +1037,7 @@ def ui_plan_node(state: ShoppingState) -> dict[str, Any]:
                         title=PLAN_TITLE,
                         product_ids=top_ids,
                         ranked=True,
+                        products=grid_products,
                     ),
                     actions=[
                         UIAction(type="compare", label="Compare"),

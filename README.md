@@ -7,7 +7,7 @@
   <img alt="Pydantic v2" src="https://img.shields.io/badge/Pydantic%20v2-E92063?logo=pydantic&logoColor=white&style=flat-square">
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js%2016-000000?logo=next.js&logoColor=white&style=flat-square">
   <img alt="React 19" src="https://img.shields.io/badge/React%2019-61DAFB?logo=react&logoColor=black&style=flat-square">
-  <img alt="tests" src="https://img.shields.io/badge/tests-345%20passing-3DDC84?style=flat-square">
+  <img alt="tests" src="https://img.shields.io/badge/tests-390%20passing-3DDC84?style=flat-square">
   <a href="https://github.com/Zahrannnn/agentic-shop/pull/1"><img alt="phase 1" src="https://img.shields.io/badge/phase%201-backend-8A2BE2?style=flat-square"></a>
   <a href="https://github.com/Zahrannnn/agentic-shop/pull/4"><img alt="phase 2" src="https://img.shields.io/badge/phase%202-frontend-FF6F61?style=flat-square"></a>
 </p>
@@ -22,9 +22,25 @@ comparisons, and cart views. No pages, no navigation — just a transcript.
 
 > [!TIP]
 > Everything runs **keyless and offline** in mock mode: the full agent pipeline, the
-> SSE API, the frontend, and all 345 tests (209 backend + 136 frontend). Drop in an OpenCode Zen model when you want a real LLM.
+> SSE API, the frontend, and all 390 tests (224 backend + 166 frontend). Drop in an OpenCode Zen model when you want a real LLM.
 
 **Explore:** [Quickstart](#-quickstart) · [Architecture](#architecture) · [System design](#system-design) · [Try the MVP scenario](#try-the-mvp-scenario) · [Design system](#design-system) · [Real model](#use-a-real-model)
+
+---
+
+## The app
+
+| | |
+|---|---|
+| ![The storefront](docs/screenshots/shop-empty.png) | ![Recommendation turn](docs/screenshots/shop-recommendation.png) |
+| **The storefront** — light "Curator's Desk" surface, suggestion chips, Browse catalog, REAL/MOCK badge | **Recommendation turn** — streamed reasoning, ranked ecommerce cards with prices and ANC badges |
+| ![Comparison](docs/screenshots/shop-compare.png) | ![Details](docs/screenshots/shop-details.png) |
+| **Comparison** — side-by-side attributes, values straight from the catalog | **Details** — full catalog snapshot card with reviewer quotes |
+| ![Catalog sheet](docs/screenshots/shop-catalog-sheet.png) | |
+| **Catalog sheet** — browse all 38 products, one tap asks the agent | |
+
+Full-width layout, sticky composer, thinking skeletons while the model works, and a
+REAL/MOCK mode badge — the transcript stays the only navigation.
 
 > [!TIP]
 > Building the frontend? **[FRONTEND_GUIDE.md](FRONTEND_GUIDE.md)** is the
@@ -68,7 +84,7 @@ flowchart LR
 | Module | Role |
 |---|---|
 | `backend/app/llm/` | The **only** doorway to any model: env-configured `ChatOpenAI`, deterministic `MockChatLLM`, and the validate → retry-once → fail-clean structured-output wrapper |
-| `backend/app/catalog/` | Curated 28-item headphone dataset with pre-scored per-attribute reviews + 4–6 quotes each — research reads scores, never does runtime NLP |
+| `backend/app/catalog/` | Curated 38-product dataset (28 headphones + 10 earbuds) with pre-scored per-attribute reviews + 4–6 quotes each — research reads scores, never does runtime NLP |
 | `backend/app/ranking/` | Pure `score_products()`: weighted min-max normalized attributes, lexicographic tie-break, byte-stable output |
 | `backend/app/tools/` | `search_products` (with deterministic filter relaxation), pre-scored research, mock cart |
 | `backend/app/graph/` | Typed `ShoppingState`, node implementations, builder with `MemorySaver` checkpointer |
@@ -252,6 +268,7 @@ LLM_API_STYLE=responses        # muse is a Responses-API-only reasoning model
 ├── FRONTEND_GUIDE.md                  agent-ready backend contract for FE implementers
 ├── specs/001-backend-agent-scaffold/  backend spec · research · plan · contracts · tasks
 ├── specs/002-frontend-ui-renderer/    frontend spec · research · plan · data-model · tasks
+├── docs/screenshots/                  the app in action (light Curator's Desk)
 ├── .specify/                          GitHub Spec Kit (constitution, templates)
 ├── backend/
 │   ├── app/llm/          model factory · mock mode · structured-output wrapper
@@ -263,7 +280,7 @@ LLM_API_STYLE=responses        # muse is a Responses-API-only reasoning model
 │   ├── app/api/          /health · /api/chat (SSE)
 │   ├── fixtures/ui-plans/  shared plan contract corpus
 │   └── tests/            209 tests: scorer, tools, DSL, SSE contract, graph, config
-└── frontend/             corelia-next-boilerplate (Next.js 16 · React 19 · Tailwind v4)
+└── frontend/            corelia-next-boilerplate — detailed guide: frontend/README.md (Next.js 16 · React 19 · Tailwind v4)
     ├── src/features/shopping/   the whole feature: api/ (SSE client, frame parser),
     │                            hooks/ (use-agent-turn), store/ (RTK slices),
     │                            validations/ (Zod plan mirror), components/ (renderer

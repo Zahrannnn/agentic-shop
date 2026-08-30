@@ -73,6 +73,15 @@ describe("PlanRenderer with the product-grid fixture", () => {
     expect(within(cards[1]).getByText("02")).toBeInTheDocument();
     expect(within(cards[2]).getByText("03")).toBeInTheDocument();
 
+    // Ecommerce cards render from the products snapshot: name, tabular price,
+    // ANC badge, mono id beneath.
+    expect(within(cards[0]).getByText("Aurora Hush Pro")).toBeInTheDocument();
+    expect(
+      within(cards[0]).getByTestId("price-aurora-hush-pro"),
+    ).toHaveTextContent("$179.00");
+    expect(within(cards[0]).getByText("adaptive ANC")).toBeInTheDocument();
+    expect(within(cards[1]).getByText("Cloudline Air")).toBeInTheDocument();
+
     // One button per unique action type: compare grid-level, details and
     // add_to_cart attached to every card.
     expect(screen.getByRole("button", { name: "Compare" })).toBeInTheDocument();

@@ -75,15 +75,30 @@ class UIAction(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class GridProduct(BaseModel):
+    """One card snapshot inside a ``product_grid``: enough for an ecommerce
+    card without a catalog lookup."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    id: str
+    name: str
+    price_usd: float
+    anc_type: str
+
+
 class ProductGridProps(BaseModel):
     """Props for ``product_grid``; ``ranked=True`` means product_ids are in
-    recommendation order."""
+    recommendation order. ``products`` is an optional per-card snapshot keyed
+    1:1 with ``product_ids`` (ecommerce cards render names and prices from
+    it); keys must match ``product_ids`` exactly when present."""
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     title: str
     product_ids: list[str] = Field(min_length=1, max_length=6)
     ranked: bool
+    products: list[GridProduct] | None = None
 
 
 class PreferencePickerProps(BaseModel):
