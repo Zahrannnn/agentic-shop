@@ -32,6 +32,16 @@ export const CATALOG_IDS: ReadonlySet<string> = new Set([
   "obsidian-audio-flag-8",
   "cascadia-reference",
   "meridian-sound-lux",
+  "pockettone-basis-29",
+  "wavelet-core-buds",
+  "aquabass-sport-2",
+  "nimblepod-daily",
+  "zenburst-hush",
+  "pebble-hush-anc",
+  "airglide-open-ear",
+  "sonavista-pro-buds",
+  "solstice-elite-anc",
+  "lumenflow-studio-buds",
 ]);
 
 // Name used by specs/002-frontend-ui-renderer/data-model.md for the same set.

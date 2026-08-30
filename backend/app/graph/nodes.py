@@ -48,6 +48,7 @@ from pydantic import ValidationError
 
 from app.catalog.loader import load_catalog
 from app.catalog.models import Product
+from app.config import get_settings
 from app.dsl.models import (
     CartLine,
     CartViewProps,
@@ -82,6 +83,7 @@ from app.tools.search import SearchFilters, relax_filters, search_products
 __all__ = [
     "ASK_QUESTION",
     "COMPARISON_ATTRIBUTES",
+    "DEFAULT_BUDGETS",
     "DEFAULT_BUDGET_USD",
     "FOLLOWUP_ACTION_TYPES",
     "FollowUp",
@@ -103,11 +105,18 @@ __all__ = [
 #: Custom stream payload: ``(kind, data)`` translated 1:1 into an SSE frame.
 StreamPayload = tuple[str, Any]
 
-#: How many candidates the research node digests (bounded work at 28 items).
+#: How many candidates the research node digests (bounded work at 38 items).
 RESEARCH_TOP_N: int = 6
 
-#: Budget cap applied (and disclosed) when the shopper states no budget (R7,
-#: US2 scenario 3). Module constant so tests can pin the exact assumption.
+#: Budget caps applied (and disclosed) when the shopper states no budget (R7,
+#: US2 scenario 3; D5 amendment: the catalog carries multiple categories, and
+#: a sensible default differs per category — earbuds run far cheaper than
+#: over-ear headphones). Module constant so tests can pin the exact table.
+DEFAULT_BUDGETS: dict[str, float] = {"headphones": 250.0, "earbuds": 150.0}
+
+#: Fallback cap for a category with no entry in :data:`DEFAULT_BUDGETS` (or no
+#: category at all, i.e. the whole catalog is in play). Module constant so
+#: tests can pin the exact assumption.
 DEFAULT_BUDGET_USD: float = 250.0
 
 #: The clarify question — the picker plan's ``question`` prop (US2 / fixture
@@ -623,8 +632,9 @@ def search_node(state: ShoppingState) -> dict[str, Any]:
 
     Proceed-path policies (R7, US2), all deterministic:
 
-    * missing budget → the :data:`DEFAULT_BUDGET_USD` cap is applied and
-      disclosed as an assumption (never a question);
+    * missing budget → the per-category :data:`DEFAULT_BUDGETS` cap (or the
+      :data:`DEFAULT_BUDGET_USD` fallback for unknown/missing categories) is
+      applied and disclosed as an assumption (never a question);
     * hard attribute demands (battery hours / codecs) that no product in the
       category satisfies at ANY price → ``flag_contradiction`` + closest
       matches from the full category set (or whole catalog when the category
@@ -647,11 +657,11 @@ def search_node(state: ShoppingState) -> dict[str, Any]:
 
     budget = _coerce_float(intent.get("budget_usd"))
     if budget is None or budget <= 0:
-        budget = DEFAULT_BUDGET_USD
+        budget = DEFAULT_BUDGETS.get(category_key, DEFAULT_BUDGET_USD)
         intent["budget_usd"] = budget
         _add_assumption(
             intent,
-            f"No budget given — using {_fmt_price(DEFAULT_BUDGET_USD)} as a sensible cap "
+            f"No budget given — using {_fmt_price(budget)} as a sensible cap "
             f"for {category_key or 'your search'}.",
         )
 
@@ -825,12 +835,18 @@ def _rank_order_targets(state: ShoppingState, targets: tuple[str, ...]) -> list[
     return [pid for _index, pid in indexed]
 
 
-def _cart_view_plan(state: ShoppingState, cart: list[dict[str, Any]]) -> UIPlan:
+def _cart_view_plan(
+    state: ShoppingState,
+    cart: list[dict[str, Any]],
+    amends_turn_id: int | None = None,
+) -> UIPlan:
     """Deterministic ``cart_view`` plan: lines + catalog-priced total.
 
     Policy (mirrors the ``cart-one-item.json`` fixture): one
     ``remove_from_cart`` action per line while there are at most 3 lines,
-    none beyond that.
+    none beyond that. ``amends_turn_id`` (D2 amendment) is set only when the
+    session already has a cart region: the new plan then supersedes THAT
+    turn's plan in place instead of appending a duplicate cart section.
     """
     summary = get_cart(cart, get_catalog())
     lines = list(summary.lines)
@@ -840,8 +856,11 @@ def _cart_view_plan(state: ShoppingState, cart: list[dict[str, Any]]) -> UIPlan:
     ]
     if len(lines) > 3:
         actions = []
+    envelope = _envelope(state)
+    if amends_turn_id is not None:
+        envelope["amends_turn_id"] = amends_turn_id
     return UIPlan(
-        **_envelope(state),
+        **envelope,
         root=ComponentNode(
             type="cart_view",
             props=CartViewProps(
@@ -866,6 +885,31 @@ def _comparison_value(product: Product, attribute: str) -> Any:
     return getattr(product, attribute, None)
 
 
+def _details_snapshot(product: Product) -> dict[str, Any]:
+    """Catalog snapshot for a ``product_details`` card: the fields travel with
+    the plan so the client renders a complete card without a lookup."""
+
+    def scores(attr: str) -> Any:
+        return getattr(product.review_scores, attr, None)
+
+    return {
+        "product_name": product.name,
+        "brand": product.brand,
+        "price_usd": product.price_usd,
+        "battery_hours": product.battery_hours,
+        "weight_g": product.weight_g,
+        "anc_type": product.anc_type,
+        "driver_mm": product.driver_mm,
+        "codecs": list(product.codecs),
+        "multipoint": product.multipoint,
+        "folding": product.folding,
+        "review_scores": {
+            attr: scores(attr) for attr in ("comfort", "anc", "sound", "battery", "value")
+        },
+        "quotes": list(product.quotes),
+    }
+
+
 def _build_followup_plan(
     state: ShoppingState, followup: dict[str, Any]
 ) -> tuple[UIPlan, dict[str, Any]]:
@@ -873,8 +917,10 @@ def _build_followup_plan(
     involved: the component kind was already fixed by
     :func:`app.graph.followups.resolve_followup`, so there is nothing left for
     a model to choose. Returns ``(plan, extra_state_update)`` where the extra
-    covers ``selected_ids`` and cart mutations (performed via the pure tools
-    in ``app.tools.cart``)."""
+    covers ``selected_ids``, cart mutations (performed via the pure tools in
+    ``app.tools.cart``), and the D2 amendment anchor ``cart_plan_turn_id``
+    (stored on the FIRST cart mutation only, AFTER building — the anchor is
+    that turn's own id)."""
     kind = followup.get("kind")
     targets = tuple(pid for pid in (followup.get("product_ids") or []) if isinstance(pid, str))
     if kind == "disclosure":
@@ -917,11 +963,16 @@ def _build_followup_plan(
         )
         return plan, {"selected_ids": ordered}
     if kind == "details":
+        catalog_by_id = {p.id: p for p in get_catalog()}
         plan = UIPlan(
             **_envelope(state),
             root=ComponentNode(
                 type="product_details",
-                props=ProductDetailsProps(product_id=targets[0], show_quotes=True),
+                props=ProductDetailsProps(
+                    product_id=targets[0],
+                    show_quotes=True,
+                    **_details_snapshot(catalog_by_id[targets[0]]),
+                ),
             ),
         )
         return plan, {"selected_ids": [targets[0]]}
@@ -933,7 +984,16 @@ def _build_followup_plan(
     elif kind == "remove_from_cart":
         cart = remove_from_cart(cart, get_catalog(), targets[0])
         extra = {"cart": cart}
-    return _cart_view_plan(state, cart), extra
+    # D2 amendment: every ``cart_view`` supersedes the anchored first cart
+    # plan in place via ``amendsTurnId``; only the FIRST cart mutation emits
+    # a standalone plan and records the anchor. The plan's own ``turnId``
+    # keeps incrementing normally — it identifies the turn, not the region.
+    anchor = state.get("cart_plan_turn_id")
+    if isinstance(anchor, int) and anchor >= 1:
+        return _cart_view_plan(state, cart, amends_turn_id=anchor), extra
+    plan = _cart_view_plan(state, cart)
+    extra["cart_plan_turn_id"] = plan.turn_id
+    return plan, extra
 
 
 def ui_plan_node(state: ShoppingState) -> dict[str, Any]:
@@ -1058,6 +1118,48 @@ def _followup_narration(
     return f"Your cart: {items} — total {_fmt_price(summary.total_usd)}."
 
 
+def _stream_real_narration(state: ShoppingState, context_products: list[dict[str, Any]]) -> str:
+    """Real-mode narration: stream the model's answer token-by-token.
+
+    The facts (names, ids, computed highlights) travel in the prompt and the
+    model is instructed to use only those numbers, so the streamed prose stays
+    grounded while the shopper watches it arrive. Returns the full streamed
+    text; a deterministically composed fallback covers an empty stream.
+    """
+    facts = "; ".join(
+        f"{product['name']}: " + "; ".join(product["highlights"]) for product in context_products
+    )
+    system = (
+        "You are a confident shopping curator finishing a recommendation. "
+        "Write the shopper's answer in 2-4 short sentences. Use ONLY the "
+        "facts below - reuse every number verbatim, do not invent attributes, "
+        "prices, or products, and mention each product exactly once. End with "
+        "one short question inviting the next step. Facts: " + facts
+    )
+    prompt = _llm_messages(
+        system,
+        state.get("pending_user_text", ""),
+        {},
+    )
+    accumulated = ""
+    for chunk in get_llm().stream(prompt):
+        piece = getattr(chunk, "text", "") or ""
+        if not piece:
+            continue
+        accumulated += piece
+        _emit(("message_delta", {"text": piece}))
+    if accumulated.strip():
+        return accumulated
+    lines = []
+    for product in context_products:
+        highlight = product["highlights"][0] if product["highlights"] else "a strong match"
+        lines.append(f"{product['name']}: {highlight}.")
+    fallback = f"Here is what I found. {' '.join(lines)} Want me to compare any of these?"
+    for piece in _chunk_words(fallback):
+        _emit(("message_delta", {"text": piece}))
+    return fallback
+
+
 def respond_node(state: ShoppingState) -> dict[str, Any]:
     """Grounded narration streamed as word-paired ``message_delta`` chunks.
 
@@ -1091,6 +1193,19 @@ def respond_node(state: ShoppingState) -> dict[str, Any]:
                     "highlights": _highlights(product, scored, budget),
                 }
             )
+        if get_settings().LLM_MODE.strip().lower() == "real":
+            # Real mode streams the narration completion token-by-token: the
+            # shopper watches the answer arrive instead of waiting for the
+            # full generation (phase-2 latency UX). Grounding travels in the
+            # prompt as pre-computed facts (see _stream_real_narration).
+            text = _stream_real_narration(state, context_products)
+            assumptions = list((state.get("intent") or {}).get("assumptions") or [])
+            text = _assumption_note(assumptions) + text
+            messages = [
+                *state.get("messages", []),
+                {"role": "assistant", "content": text},
+            ]
+            return {"messages": messages}
         narration = call_structured(
             get_llm(),
             Narration,

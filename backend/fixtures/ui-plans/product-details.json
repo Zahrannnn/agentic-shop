@@ -6,7 +6,33 @@
     "type": "product_details",
     "props": {
       "productId": "aurora-hush-pro",
-      "showQuotes": true
+      "showQuotes": true,
+      "productName": "Aurora Hush Pro",
+      "brand": "Aurora Labs",
+      "priceUsd": 179.0,
+      "batteryHours": 45.0,
+      "weightG": 250.0,
+      "ancType": "adaptive",
+      "driverMm": 40.0,
+      "codecs": [
+        "sbc",
+        "aac",
+        "aptx",
+        "aptx_hd"
+      ],
+      "multipoint": true,
+      "folding": false,
+      "reviewScores": {
+        "comfort": 4.7,
+        "anc": 4.9,
+        "sound": 4.4,
+        "battery": 4.6,
+        "value": 4.2
+      },
+      "quotes": [
+        "Engine cabin noise simply vanishes; the adaptive ANC is the best I have tested.",
+        "Ten hours from LAX to Sydney and the battery gauge barely moved."
+      ]
     },
     "actions": []
   }

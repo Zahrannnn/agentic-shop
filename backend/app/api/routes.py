@@ -1,4 +1,4 @@
-"""HTTP routes: ``GET /health`` and the SSE chat endpoint (DECISIONS.md D7).
+"""HTTP routes: ``GET /health``, ``GET /api/catalog``, and SSE chat (D7).
 
 The chat endpoint drives the compiled graph with ``astream(...,
 stream_mode="custom")`` and translates the nodes' ``(kind, data)`` payloads
@@ -37,6 +37,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.api.schemas import (
+    CatalogProductOut,
+    CatalogResponse,
     ChatRequest,
     ErrorEvent,
     MessageDeltaEvent,
@@ -48,6 +50,7 @@ from app.api.schemas import (
 )
 from app.config import get_settings
 from app.graph.builder import get_graph
+from app.graph.nodes import get_catalog
 from app.llm.client import StructuredOutputError
 
 router = APIRouter()
@@ -105,6 +108,69 @@ _INTERNAL_ERROR_MESSAGE = "Something went wrong on our side. Please try again."
 async def health() -> dict[str, str]:
     """Liveness plus the effective LLM mode; never echoes secrets."""
     return {"status": "ok", "mode": "mock" if get_settings().is_mock else "real"}
+
+
+# ---------------------------------------------------------------------------
+# Catalog (read-only)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/api/catalog",
+    tags=["catalog"],
+    summary="The full curated product catalog, cheapest first",
+    description=(
+        "Returns every validated catalog product as a JSON dump: `count` plus a "
+        "`products` array sorted by `priceUsd` ascending (id ascending on ties, "
+        "so the order is deterministic).\n\n"
+        "Keys are camelCase to match the UI-plan DSL. Review **quotes are "
+        "deliberately excluded** — this endpoint is for browsing and rendering; "
+        "quote text only ever flows through the chat pipeline (`get_product_reviews`)."
+    ),
+    responses={
+        200: {
+            "description": "The current catalog snapshot (static per process).",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "count": 2,
+                        "products": [
+                            {
+                                "id": "pockettone-basis-29",
+                                "name": "Pockettone Basis 29",
+                                "brand": "Pockettone",
+                                "category": "earbuds",
+                                "priceUsd": 29.0,
+                                "batteryHours": 6.0,
+                                "weightG": 4.2,
+                                "ancType": "none",
+                                "reviewScores": {
+                                    "comfort": 3.9,
+                                    "anc": 1.8,
+                                    "sound": 3.2,
+                                    "battery": 3.5,
+                                    "value": 4.3,
+                                },
+                                "multipoint": False,
+                                "folding": False,
+                                "codecs": ["sbc", "aac"],
+                            }
+                        ],
+                    }
+                }
+            },
+        }
+    },
+)
+async def catalog() -> CatalogResponse:
+    """Dump the validated catalog, price-ascending (id breaks ties)."""
+    products = sorted(get_catalog(), key=lambda product: (product.price_usd, product.id))
+    return CatalogResponse(
+        count=len(products),
+        products=[
+            CatalogProductOut.model_validate(product, from_attributes=True) for product in products
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------

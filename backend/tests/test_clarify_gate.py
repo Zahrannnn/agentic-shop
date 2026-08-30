@@ -15,7 +15,13 @@ from app.catalog.loader import load_catalog
 from app.dsl.models import UIPlan
 from app.dsl.validate import serialize_plan, validate_plan
 from app.graph.builder import get_graph
-from app.graph.nodes import ASK_QUESTION, DEFAULT_BUDGET_USD, clarify_decision, ui_agent_ask
+from app.graph.nodes import (
+    ASK_QUESTION,
+    DEFAULT_BUDGET_USD,
+    DEFAULT_BUDGETS,
+    clarify_decision,
+    ui_agent_ask,
+)
 
 pytestmark = pytest.mark.usefixtures("mock_settings")
 
@@ -217,6 +223,35 @@ def test_missing_budget_proceeds_with_default_cap_and_disclosure() -> None:
     assert all(
         catalog[scored.product_id].price_usd <= DEFAULT_BUDGET_USD for scored in state["ranked"]
     )
+
+
+def test_missing_budget_earbuds_uses_the_category_cap() -> None:
+    """D5 amendment: the budget default is per category — earbuds cap at $150."""
+    state, _config = _invoke(
+        "gate-budget-earbuds-001",
+        "I want earbuds for the gym. Battery life matters most.",
+    )
+    assert state.get("error") is None
+    # The mock intent handler recognizes the earbud spellings (client.py).
+    assert state["intent"]["category"] == "earbuds"
+    assert state["intent"]["budget_usd"] == DEFAULT_BUDGETS["earbuds"]
+    assumptions = state["intent"]["assumptions"]
+    assert any("$150" in item and "cap" in item for item in assumptions)
+    catalog = {product.id: product for product in load_catalog()}
+    assert state["ranked"]
+    assert all(catalog[scored.product_id].category == "earbuds" for scored in state["ranked"])
+    assert all(catalog[scored.product_id].price_usd <= 150.0 for scored in state["ranked"])
+
+
+def test_mock_intent_recognizes_earbud_spellings() -> None:
+    """The mock intent regex maps every earbud spelling onto 'earbuds'."""
+    from app.llm.client import _intent_extraction_handler  # noqa: PLC0415 — private hook
+
+    for text in ("earbuds for running", "which ear buds under $100", "ear-buds please"):
+        assert _intent_extraction_handler(text, {})["category"] == "earbuds"
+    # Headphones take precedence when both categories are named — the pattern
+    # order in client.py is documented policy, first match wins.
+    assert _intent_extraction_handler("headphones or earbuds?", {})["category"] == "headphones"
 
 
 def test_budget_assumption_is_not_duplicated_across_turns() -> None:

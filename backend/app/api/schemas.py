@@ -23,6 +23,9 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_vali
 
 __all__ = [
     "STAGE_ORDER",
+    "CatalogProductOut",
+    "CatalogResponse",
+    "CatalogReviewScoresOut",
     "ChatRequest",
     "ErrorEvent",
     "MessageDeltaEvent",
@@ -205,3 +208,50 @@ class ErrorEvent(_ProtocolEvent):
 
 ProtocolEvent = StatusEvent | MessageDeltaEvent | UIUpdateEvent | TurnEndEvent | ErrorEvent
 """Union of every server->client event payload model, for route type hints."""
+
+
+# ---------------------------------------------------------------------------
+# GET /api/catalog (read-only catalog dump, camelCase wire like the DSL)
+# ---------------------------------------------------------------------------
+
+
+class CatalogReviewScoresOut(BaseModel):
+    """The five pre-scored review attributes of a catalog product (D5)."""
+
+    comfort: float
+    anc: float
+    sound: float
+    battery: float
+    value: float
+
+
+class CatalogProductOut(BaseModel):
+    """One catalog product on the wire (camelCase keys, NO review quotes).
+
+    Field names mirror the internal ``Product`` model with aliases for the
+    multi-word snake_case attributes; single-word fields keep their names.
+    Quotes are deliberately excluded — this is a browsing payload, and the
+    quote text is only ever served through the chat pipeline (FR-005).
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    name: str
+    brand: str
+    category: str
+    price_usd: float = Field(alias="priceUsd")
+    battery_hours: float = Field(alias="batteryHours")
+    weight_g: float = Field(alias="weightG")
+    anc_type: str = Field(alias="ancType")
+    review_scores: CatalogReviewScoresOut = Field(alias="reviewScores")
+    multipoint: bool
+    folding: bool
+    codecs: list[str]
+
+
+class CatalogResponse(BaseModel):
+    """Body of ``GET /api/catalog``: the full curated catalog, price-sorted."""
+
+    count: int
+    products: list[CatalogProductOut]

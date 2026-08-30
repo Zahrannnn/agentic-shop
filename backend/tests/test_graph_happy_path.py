@@ -421,15 +421,25 @@ def test_us3_ask_plan_matches_preference_picker_fixture() -> None:
     fixture = json.loads(
         (FIXTURES_DIR / "preference-picker-category.json").read_text(encoding="utf-8")
     )
-    # The catalog carries exactly the headphones category, so the generated
-    # chips must be semantically identical to the contract fixture.
+    # Multi-category catalog (D5 amendment): the generated chips now cover
+    # every catalog category plus the fallback, so the headphones-era contract
+    # fixture is a strict SUBSET of the generated picker, not equal to it.
     assert plan.root.props.question == fixture["root"]["props"]["question"]
-    assert plan.root.props.options == fixture["root"]["props"]["options"]
+    assert fixture["root"]["props"]["options"] == ["Headphones", "Something else"]
+    generated_options = plan.root.props.options
+    assert all(option in generated_options for option in fixture["root"]["props"]["options"])
+    catalog_categories = sorted({p.category for p in load_catalog()})
+    assert generated_options == [
+        *[category.replace("_", " ").title() for category in catalog_categories],
+        "Something else",
+    ]
     generated_actions = [
         {"type": action.type, "label": action.label, "payload": action.payload}
         for action in plan.root.actions
     ]
-    assert generated_actions == fixture["root"]["actions"]
+    for fixture_action in fixture["root"]["actions"]:
+        assert fixture_action in generated_actions
+    assert len(generated_actions) == len(generated_options)
     assert plan_dict["planVersion"] == fixture["planVersion"] == "1"
     assert plan_dict["root"]["type"] == fixture["root"]["type"]
 
@@ -570,15 +580,50 @@ async def test_us4_add_view_remove_cart_round_trip() -> None:
     _events, state3, _config = await _collect_stream(session, "what's in my cart?")
     assert state3["cart"] == [{"product_id": EXPECTED_TOP3[0], "quantity": 1}]
     assert state3["plan"]["root"]["type"] == "cart_view"
+    # The explicit cart view amends the anchored region too (single cart
+    # section on the client) instead of appending a duplicate table.
+    assert state3["plan"]["amendsTurnId"] == state2["cart_plan_turn_id"]
     text3 = "".join(d["text"] for k, d in _events if k == "message_delta")
     assert text3 == f"Your cart: {top.name} x1 — total ${top.price_usd:g}."
 
     _events, state4, _config = await _collect_stream(session, "remove the first one from my cart")
     assert state4["cart"] == []
     assert state4["plan"]["root"]["type"] == "cart_view"
+    assert state4["plan"]["amendsTurnId"] == state2["cart_plan_turn_id"]
     assert state4["plan"]["root"]["props"] == {"items": [], "totalUsd": 0.0}
     text4 = "".join(d["text"] for k, d in _events if k == "message_delta")
     assert text4 == f"Removed {top.name} from your cart."
+
+
+async def test_us4_second_cart_mutation_amends_the_first_cart_turn() -> None:
+    """D2 amendment: the first cart mutation emits a standalone ``cart_view``
+    (no ``amendsTurnId``) and anchors ``cart_plan_turn_id``; the next cart
+    mutation emits a ``cart_view`` whose ``amendsTurnId`` points at that
+    anchor while its own ``turnId`` keeps incrementing (the id identifies the
+    turn, not the plan region)."""
+    session = "us4-amend-001"
+    _state1, _config = _run_graph(session)
+    catalog_ids = {product.id for product in load_catalog()}
+
+    _events2, state2, _config = await _collect_stream(session, "add the first one to my cart")
+    plan2 = UIPlan.model_validate(state2["plan"])
+    assert plan2.root.type == "cart_view"
+    assert plan2.amends_turn_id is None
+    assert "amendsTurnId" not in state2["plan"]  # absent from the wire document
+    assert state2["cart_plan_turn_id"] == plan2.turn_id
+
+    _events3, state3, _config = await _collect_stream(session, "add the second one to my cart")
+    plan3 = UIPlan.model_validate(state3["plan"])
+    validate_plan(plan3, catalog_ids)
+    assert plan3.root.type == "cart_view"
+    assert plan3.amends_turn_id == plan2.turn_id
+    assert state3["plan"]["amendsTurnId"] == plan2.turn_id  # on the wire, camelCase
+    assert plan3.turn_id == plan2.turn_id + 1
+    assert state3["cart_plan_turn_id"] == plan2.turn_id  # anchor unchanged
+    assert {line.product_id: line.quantity for line in plan3.root.props.items} == {
+        EXPECTED_TOP3[0]: 1,
+        EXPECTED_TOP3[1]: 1,
+    }
 
 
 async def test_us4_add_that_one_targets_last_selected() -> None:
@@ -861,3 +906,53 @@ def test_exception_without_status_code_reraises_without_downgrade() -> None:
         call_structured(llm, PreferenceWeights, "weights please")
     assert llm.json_invocations == 0
     assert "fake-timeout" not in _JSON_MODE_MODELS
+
+
+def test_real_mode_streams_narration_tokens(monkeypatch):
+    """LLM_MODE=real streams the narration completion token-by-token (latency
+    UX): no structured Narration call, streamed text lands in the transcript."""
+    from types import SimpleNamespace
+
+    import app.graph.nodes as nodes
+    from app.ranking.scorer import ScoredProduct
+
+    class Chunk:
+        def __init__(self, piece: str) -> None:
+            self._piece = piece
+
+        @property
+        def text(self) -> str:
+            return self._piece
+
+    class StreamingFakeLLM:
+        def __init__(self) -> None:
+            self.stream_calls = 0
+
+        def stream(self, messages):  # noqa: ANN001
+            self.stream_calls += 1
+            return iter([Chunk("Aurora Hush Pro "), Chunk("is the pick.")])
+
+        def with_structured_output(self, schema):  # noqa: ANN001, ARG002
+            raise AssertionError("real narration must not use structured output")
+
+    fake = StreamingFakeLLM()
+    monkeypatch.setattr(nodes, "get_settings", lambda: SimpleNamespace(LLM_MODE="real"))
+    monkeypatch.setattr(nodes, "get_llm", lambda: fake)
+
+    product = next(p for p in nodes.get_catalog() if p.id == "aurora-hush-pro")
+    state = {
+        "pending_user_text": "headphones for flights under $200",
+        "messages": [],
+        "intent": {"budget_usd": 200.0, "assumptions": []},
+        "ranked": [
+            ScoredProduct(product_id=product.id, score=0.9, contributions={"anc": 0.45}, rank=1)
+        ],
+        "followup": None,
+        "error": None,
+    }
+
+    result = nodes.respond_node(state)
+
+    assert fake.stream_calls == 1
+    content = result["messages"][-1]["content"]
+    assert "Aurora Hush Pro is the pick." in content

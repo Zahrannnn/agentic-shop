@@ -596,5 +596,228 @@
       "The luxury tax is real; you are paying for sound and build.",
       "Cups swivel to micro-adjust for any head shape."
     ]
+  },
+  {
+    "id": "pockettone-basis-29",
+    "name": "Pockettone Basis 29",
+    "brand": "Pockettone",
+    "category": "earbuds",
+    "price_usd": 29.0,
+    "battery_hours": 6.0,
+    "weight_g": 4.2,
+    "anc_type": "none",
+    "driver_mm": 8.0,
+    "codecs": ["sbc", "aac"],
+    "multipoint": false,
+    "folding": false,
+    "review_scores": {"comfort": 3.9, "anc": 1.8, "sound": 3.2, "battery": 3.5, "value": 4.3},
+    "quotes": [
+      "For thirty dollars they pair fast and stay connected all commute.",
+      "No noise cancelling at all, so buses stay audible the whole ride.",
+      "Six hours per charge is honest; the case adds three more top-ups.",
+      "Mids are decent, bass is loose, and calls are understandable.",
+      "They are so light I regularly check whether they are still in."
+    ]
+  },
+  {
+    "id": "wavelet-core-buds",
+    "name": "Wavelet Core Buds",
+    "brand": "Wavelet",
+    "category": "earbuds",
+    "price_usd": 49.0,
+    "battery_hours": 7.0,
+    "weight_g": 4.8,
+    "anc_type": "passive",
+    "driver_mm": 8.0,
+    "codecs": ["sbc", "aac"],
+    "multipoint": false,
+    "folding": false,
+    "review_scores": {"comfort": 4.0, "anc": 2.6, "sound": 3.6, "battery": 3.9, "value": 4.2},
+    "quotes": [
+      "The sealed tip passive isolation hushes an open-plan office fine.",
+      "Seven hours of podcasts and still a fifth of the battery left.",
+      "Warm, forgiving tuning that flatters lo-fi streams and audiobooks.",
+      "Wing-free shells stayed put through a sweaty 5k without drama.",
+      "You get exactly what you pay for, which is quietly rare."
+    ]
+  },
+  {
+    "id": "aquabass-sport-2",
+    "name": "Aquabass Sport 2",
+    "brand": "Aquabass",
+    "category": "earbuds",
+    "price_usd": 59.0,
+    "battery_hours": 5.5,
+    "weight_g": 5.0,
+    "anc_type": "none",
+    "driver_mm": 10.0,
+    "codecs": ["sbc", "aac"],
+    "multipoint": false,
+    "folding": false,
+    "review_scores": {"comfort": 3.8, "anc": 1.9, "sound": 3.8, "battery": 4.0, "value": 4.4},
+    "quotes": [
+      "Rinsed them under the tap after a muddy trail run; good as new.",
+      "The bass punch carries over wind and treadmill din very well.",
+      "Ear hooks grip firmly, though glasses wearers feel them by hour two.",
+      "Battery is shorter than the box claims once you crank the volume.",
+      "Unbeatable gym insurance at sixty bucks; I keep a pair in the bag."
+    ]
+  },
+  {
+    "id": "nimblepod-daily",
+    "name": "Nimblepod Daily",
+    "brand": "Nimblepod",
+    "category": "earbuds",
+    "price_usd": 79.0,
+    "battery_hours": 7.5,
+    "weight_g": 4.6,
+    "anc_type": "passive",
+    "driver_mm": 8.0,
+    "codecs": ["sbc", "aac", "lc3"],
+    "multipoint": true,
+    "folding": false,
+    "review_scores": {"comfort": 4.2, "anc": 2.8, "sound": 3.9, "battery": 4.1, "value": 4.3},
+    "quotes": [
+      "Multipoint between my laptop and phone finally just works, no re-pairing.",
+      "LC3 on the new phone gives a noticeable bump in call clarity.",
+      "The passive seal plus memory foam tips dulls most keyboard clatter.",
+      "Tiny stems, tiny case, and I forget they are in until the chime.",
+      "Charging case is pocketable and the magnet snap is very satisfying."
+    ]
+  },
+  {
+    "id": "zenburst-hush",
+    "name": "Zenburst Hush",
+    "brand": "Zenburst",
+    "category": "earbuds",
+    "price_usd": 99.0,
+    "battery_hours": 7.0,
+    "weight_g": 5.2,
+    "anc_type": "active",
+    "driver_mm": 10.0,
+    "codecs": ["sbc", "aac", "aptx"],
+    "multipoint": true,
+    "folding": false,
+    "review_scores": {"comfort": 4.3, "anc": 4.0, "sound": 4.0, "battery": 3.8, "value": 4.1},
+    "quotes": [
+      "First ANC under a hundred that actually mutes the cafe espresso machine.",
+      "aptX over the tablet keeps video lip-sync tight on long flights.",
+      "Balanced, slightly bright sound; vocals step forward nicely.",
+      "Wind noise defeats the mics, so calls on bikes stay rough.",
+      "Two-device multipoint survived a full week of desk chaos."
+    ]
+  },
+  {
+    "id": "pebble-hush-anc",
+    "name": "Pebble Hush ANC",
+    "brand": "Pebble Audio",
+    "category": "earbuds",
+    "price_usd": 129.0,
+    "battery_hours": 9.0,
+    "weight_g": 5.4,
+    "anc_type": "active",
+    "driver_mm": 11.0,
+    "codecs": ["sbc", "aac", "aptx", "lc3"],
+    "multipoint": true,
+    "folding": false,
+    "review_scores": {"comfort": 4.6, "anc": 4.8, "sound": 4.4, "battery": 4.4, "value": 4.5},
+    "quotes": [
+      "Cabin roar drops to a distant whisper; best ANC I have tried in a bud.",
+      "Nine hours of real playback and the case adds three full refills.",
+      "I wore them through a nine-hour shift and my ears never complained.",
+      "Rich, composed sound that handles both metal and acoustic sets well.",
+      "Under $150 this bundle of ANC, battery, and comfort is simply unmatched.",
+      "Multipoint plus fast pair made the laptop-phone juggling effortless."
+    ]
+  },
+  {
+    "id": "airglide-open-ear",
+    "name": "Airglide Open Ear",
+    "brand": "Airglide",
+    "category": "earbuds",
+    "price_usd": 149.0,
+    "battery_hours": 8.0,
+    "weight_g": 11.5,
+    "anc_type": "none",
+    "driver_mm": 12.0,
+    "codecs": ["sbc", "aac"],
+    "multipoint": false,
+    "folding": false,
+    "review_scores": {"comfort": 4.4, "anc": 1.2, "sound": 3.4, "battery": 4.2, "value": 3.9},
+    "quotes": [
+      "Nothing sits in the ear canal, so traffic noise stays comfortably audible.",
+      "The hook design is secure enough for road cycling with full awareness.",
+      "Bass is inherently light on an open design; mids and voices shine.",
+      "Eight hours from a clip-on battery pack beats every bud I own.",
+      "At 11.5 grams you notice them only when the music stops."
+    ]
+  },
+  {
+    "id": "sonavista-pro-buds",
+    "name": "Sonavista Pro Buds",
+    "brand": "Sonavista",
+    "category": "earbuds",
+    "price_usd": 199.0,
+    "battery_hours": 9.0,
+    "weight_g": 5.6,
+    "anc_type": "adaptive",
+    "driver_mm": 11.0,
+    "codecs": ["sbc", "aac", "aptx", "aptx_hd"],
+    "multipoint": true,
+    "folding": false,
+    "review_scores": {"comfort": 4.5, "anc": 4.7, "sound": 4.6, "battery": 4.3, "value": 4.0},
+    "quotes": [
+      "Adaptive ANC senses the office din and leans in without my input.",
+      "aptX Adaptive keeps hi-res streams stable even walking between rooms.",
+      "Soundstage width is remarkable for a sealed in-ear design.",
+      "The app EQ is deep but the default tuning already flatters most genres.",
+      "Price is fair rather than cheap; the case feels appropriately premium."
+    ]
+  },
+  {
+    "id": "solstice-elite-anc",
+    "name": "Solstice Elite ANC",
+    "brand": "Solstice Labs",
+    "category": "earbuds",
+    "price_usd": 249.0,
+    "battery_hours": 12.0,
+    "weight_g": 6.1,
+    "anc_type": "adaptive",
+    "driver_mm": 11.0,
+    "codecs": ["sbc", "aac", "aptx", "aptx_hd", "lc3"],
+    "multipoint": true,
+    "folding": false,
+    "review_scores": {"comfort": 4.7, "anc": 4.9, "sound": 4.7, "battery": 4.6, "value": 3.8},
+    "quotes": [
+      "Twelve measured hours per charge; I charged them twice this month.",
+      "The ANC erases subway screech in a way no under-$200 bud has managed.",
+      "Detail retrieval rivals wired monitors; cymbals have real decay.",
+      "Comes with nine tip sizes, and pair four vanished in my ears.",
+      "You pay a flagship tax, but every feature listed genuinely delivers.",
+      "Multipoint handoffs are seamless, even mid-song."
+    ]
+  },
+  {
+    "id": "lumenflow-studio-buds",
+    "name": "Lumenflow Studio Buds",
+    "brand": "Lumenflow",
+    "category": "earbuds",
+    "price_usd": 329.0,
+    "battery_hours": 11.0,
+    "weight_g": 7.4,
+    "anc_type": "adaptive",
+    "driver_mm": 12.0,
+    "codecs": ["sbc", "aac", "aptx", "aptx_hd", "lc3"],
+    "multipoint": true,
+    "folding": false,
+    "review_scores": {"comfort": 4.8, "anc": 4.8, "sound": 4.8, "battery": 4.5, "value": 3.6},
+    "quotes": [
+      "Studio-grade tuning out of the box; I mixed a demo on a train with these.",
+      "The 12mm drivers render low-end texture, not just one-note thump.",
+      "Heavier shells, yet the pressure-relief fit beats foam tips all day.",
+      "Adaptive ANC reads the room better than anybud; silence on demand.",
+      "At $329 the value score stings, but nothing else sounds this resolved.",
+      "Eleven hours with ANC off, seven honest hours with it on."
+    ]
   }
 ]

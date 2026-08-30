@@ -1,14 +1,21 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// jsdom does not implement scrollIntoView; the auto-scroll effect needs it.
+beforeAll(() => {
+  Element.prototype.scrollIntoView = vi.fn();
+});
 
 import { SESSION_STORAGE_KEY, type Turn } from "../store";
 import { ShopPage } from "./shop-page";
+import { reassuranceFor } from "./thinking-copy";
 
 /**
  * The hook module is mocked outright: the shell's contract is what
@@ -127,28 +134,31 @@ const PREFERENCE_PLAN = {
   },
 };
 
+/** The cart plan the second cart action amends (D2 amendment anchor). */
+const CART_PLAN_AMENDED = {
+  planVersion: "1",
+  sessionId: SESSION_ID,
+  turnId: 3,
+  amendsTurnId: 2,
+  root: {
+    type: "cart_view",
+    props: {
+      items: [
+        { productId: "aurora-hush-pro", quantity: 1 },
+        { productId: "cloudline-air", quantity: 1 },
+      ],
+      totalUsd: 318,
+    },
+    actions: [],
+  },
+};
+
 /** The composer textarea, addressed by its accessible label. */
 function composerBox(): HTMLTextAreaElement {
   return screen.getByRole(
     "textbox",
     { name: "Message the shopping agent" },
   ) as HTMLTextAreaElement;
-}
-
-function stageItem(label: string): HTMLElement {
-  const item = screen.getByText(label).closest("li");
-  if (!item) {
-    throw new Error(`no stepper item found for "${label}"`);
-  }
-  return item;
-}
-
-function stageItemByStage(stage: string): HTMLElement {
-  const item = document.querySelector(`[data-stage="${stage}"]`);
-  if (!(item instanceof HTMLElement)) {
-    throw new Error(`no stepper item found for stage "${stage}"`);
-  }
-  return item;
 }
 
 function sendMessage(text: string): void {
@@ -209,6 +219,43 @@ describe("ShopPage transcript", () => {
     expect(follows(prose, plan)).toBe(true);
   });
 
+  it("amends the cart region in place: one cart section after two cart actions, prose-only mutation turn", () => {
+    // Post-amendment store state: the ANCHOR turn carries the superseding
+    // cart plan; the second (mutation) turn holds only its confirmation prose.
+    setHook({
+      turns: [
+        makeTurn({
+          id: 1,
+          userText: "recommend headphones",
+          deltas: "Here is my pick.",
+          planState: "rendered",
+          plan: CART_PLAN_AMENDED,
+          terminal: { kind: "turn_end" },
+        }),
+        makeTurn({
+          id: 2,
+          sentAction: {
+            type: "add_to_cart",
+            label: "Add to cart",
+            payload: { productId: "cloudline-air" },
+          },
+          deltas: "Added Cloudline Air to your cart.",
+          terminal: { kind: "turn_end" },
+        }),
+      ],
+    });
+    render(<ShopPage />);
+
+    // Exactly ONE cart region in the whole transcript — no stacked tables.
+    expect(screen.getAllByTestId("plan-cart_view")).toHaveLength(1);
+    // The single region shows the AMENDED contents (both lines, new total).
+    expect(screen.getByText("aurora-hush-pro")).toBeInTheDocument();
+    expect(screen.getByText("cloudline-air")).toBeInTheDocument();
+    expect(screen.getByText("$318.00")).toBeInTheDocument();
+    // The mutation turn shows its confirmation prose and no plan of its own.
+    expect(screen.getByText("Added Cloudline Air to your cart.")).toBeInTheDocument();
+  });
+
   it("shows a live region only on the last agent turn's prose", () => {
     setHook({
       turns: [
@@ -253,51 +300,240 @@ describe("ShopPage transcript", () => {
   });
 });
 
-describe("ShopPage stepper", () => {
-  it("shows done stages in ink with ordinals, the live stage teal, the rest pencil", () => {
-    setHook({
-      phase: "streaming",
-      isBusy: true,
-      turns: [
-        makeTurn({
-          id: 1,
-          userText: "recommend headphones",
-          stages: ["intent_parsed", "searching"],
-        }),
-      ],
-    });
-    render(<ShopPage />);
-
-    const intent = stageItem("Intent");
-    expect(intent).toHaveAttribute("data-stage", "intent_parsed");
-    expect(intent).toHaveAttribute("data-state", "done");
-    expect(intent).toHaveClass("text-foreground");
-    expect(intent).toHaveTextContent("01");
-
-    const search = stageItem("Search");
-    expect(search).toHaveAttribute("data-state", "active");
-    expect(search).toHaveClass("text-primary");
-    expect(search).toHaveAttribute("aria-current", "step");
-
-    const rank = stageItem("Rank");
-    expect(rank).toHaveAttribute("data-state", "pending");
-    expect(rank).toHaveClass("text-muted-foreground");
+describe("ShopPage thinking states", () => {
+  // The elapsed-seconds tests fake timers; restoring here keeps the rest of
+  // the suite on real ones regardless of test order or early failure.
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
-  it("carries the found_n count on the Found stage when present", () => {
+  it("offers suggestion chips in the empty state and sends the prompt on click", () => {
+    const send = vi.fn(
+      async (): Promise<SendOutcomeLike> => ({ kind: "started" }),
+    );
+    setHook({ send });
+    render(<ShopPage />);
+
+    const chips = screen.getAllByTestId("suggestion-chip");
+    expect(chips).toHaveLength(3);
+
+    fireEvent.click(chips[0]);
+    expect(send).toHaveBeenCalledWith({
+      message:
+        "Help me find the best headphones for long flights under $200. Noise cancellation and comfort matter most.",
+      resume: false,
+    });
+  });
+
+  it("offers contextual quick replies after a rendered plan and sends on click", () => {
+    const send = vi.fn(
+      async (): Promise<SendOutcomeLike> => ({ kind: "started" }),
+    );
     setHook({
+      send,
       turns: [
         makeTurn({
           id: 1,
-          stages: ["intent_parsed", "searching", "found_n"],
-          foundCount: 14,
+          userText: "headphones for flights",
+          deltas: "Here are my picks.",
+          planState: "rendered",
+          plan: {
+            planVersion: "1",
+            sessionId: SESSION_ID,
+            turnId: 1,
+            root: {
+              type: "product_grid",
+              props: { title: "Picks", productIds: ["aurora-hush-pro"], ranked: true },
+              actions: [],
+            },
+          },
           terminal: { kind: "turn_end" },
         }),
       ],
     });
     render(<ShopPage />);
 
-    expect(stageItemByStage("found_n")).toHaveTextContent("Found · 14");
+    const replies = screen.getAllByTestId("quick-reply");
+    expect(replies).toHaveLength(2);
+    fireEvent.click(replies[0]);
+    expect(send).toHaveBeenCalledWith({
+      message: "Compare the first two",
+      resume: false,
+    });
+  });
+
+  it("hides quick replies while a turn is streaming", () => {
+    setHook({
+      phase: "streaming",
+      isBusy: true,
+      turns: [makeTurn({ id: 1, userText: "hello" })],
+    });
+    render(<ShopPage />);
+    expect(screen.queryByTestId("quick-replies")).not.toBeInTheDocument();
+  });
+
+  it("scrolls the newest turn into view as turns arrive", () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    setHook({
+      turns: [makeTurn({ id: 1, userText: "hello", deltas: "Hi." })],
+    });
+    render(<ShopPage />);
+    expect(scrollIntoView).toHaveBeenCalled();
+  });
+
+  it("shows the thinking skeleton while streaming with no prose yet", () => {
+    setHook({
+      phase: "streaming",
+      isBusy: true,
+      turns: [makeTurn({ id: 1, userText: "recommend headphones" })],
+    });
+    render(<ShopPage />);
+
+    const thinking = screen.getByTestId("turn-thinking");
+    expect(thinking).toHaveAttribute("role", "status");
+    expect(thinking).toHaveTextContent("Thinking…");
+    // The live counter starts at zero and the reassurance line opens the
+    // rotation in its first bucket.
+    expect(thinking).toHaveTextContent("Thinking… 0s");
+    expect(screen.getByTestId("turn-reassurance")).toHaveTextContent(
+      "Reading the catalog…",
+    );
+    expect(thinking.querySelectorAll(".animate-pulse").length).toBeGreaterThan(0);
+    expect(screen.queryByTestId("plan-skeleton")).not.toBeInTheDocument();
+  });
+
+  it("counts elapsed seconds live while the agent thinks", () => {
+    vi.useFakeTimers();
+    setHook({
+      phase: "streaming",
+      isBusy: true,
+      turns: [makeTurn({ id: 1, userText: "recommend headphones" })],
+    });
+    render(<ShopPage />);
+
+    expect(screen.getByTestId("turn-thinking")).toHaveTextContent(
+      "Thinking… 0s",
+    );
+
+    // Three 1s ticks — the counter tracks the elapsed seconds exactly.
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(screen.getByTestId("turn-thinking")).toHaveTextContent(
+      "Thinking… 3s",
+    );
+  });
+
+  it("rotates the reassurance line by elapsed bucket while thinking", () => {
+    vi.useFakeTimers();
+    setHook({
+      phase: "streaming",
+      isBusy: true,
+      turns: [makeTurn({ id: 1, userText: "recommend headphones" })],
+    });
+    render(<ShopPage />);
+
+    const reassurance = screen.getByTestId("turn-reassurance");
+    expect(reassurance).toHaveTextContent("Reading the catalog…");
+
+    // 8s crosses into the comparing bucket…
+    act(() => {
+      vi.advanceTimersByTime(8000);
+    });
+    expect(reassurance).toHaveTextContent(
+      "Comparing candidates on what matters to you…",
+    );
+
+    // …and 20s total into the long-wait bucket.
+    act(() => {
+      vi.advanceTimersByTime(12000);
+    });
+    expect(reassurance).toHaveTextContent(
+      "Taking the time to get this right…",
+    );
+  });
+
+  it("stops the counter when the thinking state unmounts", () => {
+    vi.useFakeTimers();
+    setHook({
+      phase: "streaming",
+      isBusy: true,
+      turns: [makeTurn({ id: 1, userText: "recommend headphones" })],
+    });
+    const { unmount } = render(<ShopPage />);
+
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    unmount();
+
+    // Prose arriving removes the thinking state; the interval is cleared with
+    // it, so further ticks must not throw on the unmounted component.
+    expect(() => {
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+    }).not.toThrow();
+    expect(screen.queryByTestId("turn-thinking")).not.toBeInTheDocument();
+  });
+
+  it("shows a plan skeleton once prose started and the plan has not landed", () => {
+    setHook({
+      phase: "streaming",
+      isBusy: true,
+      turns: [
+        makeTurn({ id: 1, userText: "recommend headphones", deltas: "Here is my pick…" }),
+      ],
+    });
+    render(<ShopPage />);
+
+    expect(screen.getByTestId("plan-skeleton")).toBeInTheDocument();
+    expect(screen.queryByTestId("turn-thinking")).not.toBeInTheDocument();
+  });
+
+  it("renders neither skeleton once the plan is rendered", () => {
+    setHook({
+      turns: [
+        makeTurn({
+          id: 1,
+          userText: "recommend headphones",
+          deltas: "Here is my pick.",
+          planState: "rendered",
+          plan: TEXT_BLOCK_PLAN,
+          terminal: { kind: "turn_end" },
+        }),
+      ],
+    });
+    render(<ShopPage />);
+
+    expect(screen.queryByTestId("turn-thinking")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("plan-skeleton")).not.toBeInTheDocument();
+    expect(screen.getByTestId("plan-text_block")).toBeInTheDocument();
+  });
+});
+
+describe("reassuranceFor", () => {
+  // The bucket boundaries are part of the contract: 0–7 reading, 8–19
+  // comparing, 20+ long wait. Asserted at both edges of each bucket.
+  it("buckets the reassurance copy deterministically by elapsed seconds", () => {
+    expect(reassuranceFor(0)).toBe("Reading the catalog…");
+    expect(reassuranceFor(7)).toBe("Reading the catalog…");
+    expect(reassuranceFor(8)).toBe(
+      "Comparing candidates on what matters to you…",
+    );
+    expect(reassuranceFor(19)).toBe(
+      "Comparing candidates on what matters to you…",
+    );
+    expect(reassuranceFor(20)).toBe("Taking the time to get this right…");
+    expect(reassuranceFor(120)).toBe("Taking the time to get this right…");
   });
 });
 
@@ -490,14 +726,31 @@ describe("ShopPage health badge", () => {
     );
     render(<ShopPage />);
 
-    const badge = await screen.findByTestId("health-badge");
+    // The badge re-queries inside waitFor: loading renders a Skeleton div and
+    // the resolved mode swaps it for a span (different element type).
     await waitFor(() => {
-      expect(badge).toHaveTextContent("MOCK");
+      expect(screen.getByTestId("health-badge")).toHaveTextContent("MOCK");
     });
-    expect(badge).toHaveAttribute("data-mode", "mock");
+    expect(
+      screen.getByTestId("health-badge").querySelector(".animate-pulse"),
+    ).toBeNull();
+    expect(screen.getByTestId("health-badge")).toHaveAttribute(
+      "data-mode",
+      "mock",
+    );
     expect(fetchMock).toHaveBeenCalledWith(
       "http://127.0.0.1:8000/health",
       { cache: "no-store" },
+    );
+  });
+
+  it("shows a skeleton while the health check resolves, then the mode", async () => {
+    fetchMock.mockImplementationOnce(
+      () => new Promise<Response>(() => undefined),
+    );
+    render(<ShopPage />);
+    expect(screen.getByTestId("health-badge").className).toContain(
+      "animate-pulse",
     );
   });
 
@@ -507,10 +760,12 @@ describe("ShopPage health badge", () => {
     );
     render(<ShopPage />);
 
-    const badge = await screen.findByTestId("health-badge");
     await waitFor(() => {
-      expect(badge).toHaveTextContent("OFFLINE");
+      expect(screen.getByTestId("health-badge")).toHaveTextContent("OFFLINE");
     });
-    expect(badge).toHaveAttribute("data-mode", "offline");
+    expect(screen.getByTestId("health-badge")).toHaveAttribute(
+      "data-mode",
+      "offline",
+    );
   });
 });

@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
+import { Button } from "@/components/ui/button";
+import type { CatalogProduct } from "../api/catalog-client";
 import { SESSION_STORAGE_KEY } from "../store";
 import {
   useAgentTurn,
@@ -9,6 +11,7 @@ import {
   type SendOutcome,
 } from "../hooks/use-agent-turn";
 import type { PlanAction } from "../validations/plan-schema";
+import { CatalogSheet } from "./catalog-sheet";
 import { HealthBadge } from "./health-badge";
 import { TranscriptTurn } from "./transcript-turn";
 import { TurnComposer } from "./turn-composer";
@@ -30,6 +33,39 @@ import { TurnComposer } from "./turn-composer";
 
 const subscribeNoop = () => () => {};
 
+/** One-tap starters (PRODUCT voice: concrete needs, not marketing). */
+const SUGGESTIONS: { label: string; prompt: string }[] = [
+  {
+    label: "Flights headphones",
+    prompt:
+      "Help me find the best headphones for long flights under $200. Noise cancellation and comfort matter most.",
+  },
+  {
+    label: "Budget noise cancelling",
+    prompt: "Best noise cancelling headphones under $100.",
+  },
+  {
+    label: "Lightweight over-ears",
+    prompt:
+      "Comfortable lightweight over-ear headphones under $250 for long listening sessions.",
+  },
+];
+
+/** Contextual next steps for a rendered plan (workbench, not chat). */
+function quickRepliesFor(plan: unknown): string[] {
+  const rootType = (plan as { root?: { type?: string } } | null)?.root?.type;
+  switch (rootType) {
+    case "product_grid":
+      return ["Compare the first two", "Add the first one to my cart"];
+    case "comparison_table":
+      return ["Add the first one to my cart", "Tell me more about the second one"];
+    case "product_details":
+      return ["Add it to my cart"];
+    default:
+      return [];
+  }
+}
+
 function hasRehydratedSession(): boolean {
   if (typeof window === "undefined") {
     return false;
@@ -50,6 +86,7 @@ function hasRehydratedSession(): boolean {
 export function ShopPage() {
   const { turns, phase, isBusy, sessionId, send, startFresh } = useAgentTurn();
   const [expiredNotice, setExpiredNotice] = useState(false);
+  const [catalogOpen, setCatalogOpen] = useState(false);
   const resumeRef = useRef(hasRehydratedSession());
   // The session id is random per process/store, so server and client renders
   // would disagree during hydration (React #418). Render it only after mount;
@@ -60,6 +97,12 @@ export function ShopPage() {
     () => true,
     () => false,
   );
+  // Keep the newest turn in view while the agent streams (deltas mutate the
+  // turns array, so this fires on every fragment).
+  const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [turns]);
 
   const submit = useCallback(
     async (input: Omit<AgentTurnInput, "resume">): Promise<void> => {
@@ -92,6 +135,18 @@ export function ShopPage() {
     [submit],
   );
 
+  // Catalog sheet → chat: closes the sheet and reuses the same submit path
+  // as typed sends, so the resume policy and 404 recovery are identical.
+  const handleAskAbout = useCallback(
+    (product: CatalogProduct) => {
+      setCatalogOpen(false);
+      void submit({
+        message: `Tell me more about the ${product.name} (${product.id}).`,
+      });
+    },
+    [submit],
+  );
+
   const handleNewConversation = useCallback(() => {
     resumeRef.current = false;
     setExpiredNotice(false);
@@ -100,21 +155,59 @@ export function ShopPage() {
 
   const streaming = phase === "streaming";
 
+  // Contextual quick replies: derived from the latest rendered plan so the
+  // next step is one tap (workbench, not chat).
+  const latestTurn = turns.at(-1) ?? null;
+  const quickReplies =
+    !isBusy && latestTurn?.planState === "rendered"
+      ? quickRepliesFor(latestTurn.plan)
+      : [];
+
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="border-b">
-        <div className="mx-auto flex w-full max-w-2xl items-center justify-between px-6 py-4">
+      <header className="sticky top-0 z-10 border-b bg-background">
+        <div className="flex w-full items-center justify-between px-6 py-4">
           <p className="text-xl font-semibold tracking-tight">agentic-shop</p>
-          <HealthBadge />
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="browse-catalog"
+              onClick={() => setCatalogOpen(true)}
+            >
+              Browse catalog
+            </Button>
+            <HealthBadge />
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-8">
+      <main className="w-full flex-1 px-6 py-8">
         <div role="log" aria-label="Conversation transcript">
           {turns.length === 0 ? (
-            <p className="text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
-              What are you looking for?
-            </p>
+            <div data-testid="empty-state" className="max-w-prose space-y-5 py-10">
+              <h1 className="text-2xl font-semibold tracking-tight">
+                What are you looking for?
+              </h1>
+              <p className="text-[15px] leading-[1.6] text-muted-foreground">
+                Describe what you need — budget, use case, what matters most.
+                The agent searches the catalog, compares the field, and commits
+                to a pick with its reasons.
+              </p>
+              <div className="flex flex-wrap gap-2" data-testid="suggestion-chips">
+                {SUGGESTIONS.map((suggestion) => (
+                  <Button
+                    key={suggestion.label}
+                    variant="outline"
+                    size="sm"
+                    data-testid="suggestion-chip"
+                    onClick={() => handleSendText(suggestion.prompt)}
+                  >
+                    {suggestion.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
           ) : (
             <ol className="space-y-8">
               {turns.map((turn, index) => (
@@ -129,11 +222,27 @@ export function ShopPage() {
               ))}
             </ol>
           )}
+          {quickReplies.length > 0 ? (
+            <div className="mt-6 flex flex-wrap gap-2" data-testid="quick-replies">
+              {quickReplies.map((reply) => (
+                <Button
+                  key={reply}
+                  variant="outline"
+                  size="sm"
+                  data-testid="quick-reply"
+                  onClick={() => handleSendText(reply)}
+                >
+                  {reply}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+          <div ref={transcriptEndRef} aria-hidden="true" />
         </div>
       </main>
 
-      <footer className="border-t">
-        <div className="mx-auto w-full max-w-2xl px-6 py-4">
+      <footer className="sticky bottom-0 z-10 border-t bg-background">
+        <div className="w-full px-6 py-4">
           {expiredNotice ? (
             <div
               data-testid="session-expired-notice"
@@ -171,6 +280,12 @@ export function ShopPage() {
           </div>
         </div>
       </footer>
+
+      <CatalogSheet
+        open={catalogOpen}
+        onOpenChange={setCatalogOpen}
+        onAskAbout={handleAskAbout}
+      />
     </div>
   );
 }

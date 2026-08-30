@@ -111,12 +111,26 @@ class ComparisonTableProps(BaseModel):
 
 
 class ProductDetailsProps(BaseModel):
-    """Props for ``product_details``; ``show_quotes`` toggles review quotes."""
+    """Props for ``product_details``; ``show_quotes`` toggles review quotes.
+    The catalog snapshot fields (name/brand/price/attributes/scores) travel
+    with the plan so the client renders a complete card without a lookup."""
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     product_id: str
     show_quotes: bool
+    product_name: str | None = None
+    brand: str | None = None
+    price_usd: float | None = None
+    battery_hours: float | None = None
+    weight_g: float | None = None
+    anc_type: str | None = None
+    driver_mm: float | None = None
+    codecs: list[str] | None = None
+    multipoint: bool | None = None
+    folding: bool | None = None
+    review_scores: dict[str, float] | None = None
+    quotes: list[str] | None = None
 
 
 class CartLine(BaseModel):
@@ -194,11 +208,20 @@ class ComponentNode(BaseModel):
 
 
 class UIPlan(BaseModel):
-    """Plan envelope (wire format): full replace every turn (D2)."""
+    """Plan envelope (wire format): full replace every turn (D2).
+
+    Bounded amendment exception (D2 amendment): a ``cart_view`` plan MAY carry
+    ``amends_turn_id`` — the ``turnId`` of the earlier cart plan turn it
+    supersedes in place. Everything else stays strict full-replace; catalog
+    rules in ``app.dsl.validate`` reject the field on any other root type.
+    Serialized with ``exclude_none=True``, so the field is simply absent from
+    the wire document when unset (the fixtures stay byte-identical).
+    """
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     plan_version: Literal["1"]
     session_id: str = Field(min_length=1)
     turn_id: int = Field(ge=1)
+    amends_turn_id: int | None = Field(default=None, ge=1)
     root: ComponentNode

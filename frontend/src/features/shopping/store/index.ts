@@ -13,6 +13,7 @@ export {
   STAGE_ORDER,
   deltaAppended,
   phaseSetIdle,
+  planAmended,
   planInvalid,
   planReceived,
   selectCurrentTurn,
