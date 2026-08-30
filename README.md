@@ -7,7 +7,7 @@
   <img alt="Pydantic v2" src="https://img.shields.io/badge/Pydantic%20v2-E92063?logo=pydantic&logoColor=white&style=flat-square">
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js%2016-000000?logo=next.js&logoColor=white&style=flat-square">
   <img alt="React 19" src="https://img.shields.io/badge/React%2019-61DAFB?logo=react&logoColor=black&style=flat-square">
-  <img alt="tests" src="https://img.shields.io/badge/tests-390%20passing-3DDC84?style=flat-square">
+  <img alt="tests" src="https://img.shields.io/badge/tests-391%20passing-3DDC84?style=flat-square">
   <a href="https://github.com/Zahrannnn/agentic-shop/pull/1"><img alt="phase 1" src="https://img.shields.io/badge/phase%201-backend-8A2BE2?style=flat-square"></a>
   <a href="https://github.com/Zahrannnn/agentic-shop/pull/4"><img alt="phase 2" src="https://img.shields.io/badge/phase%202-frontend-FF6F61?style=flat-square"></a>
 </p>
@@ -22,7 +22,7 @@ comparisons, and cart views. No pages, no navigation — just a transcript.
 
 > [!TIP]
 > Everything runs **keyless and offline** in mock mode: the full agent pipeline, the
-> SSE API, the frontend, and all 390 tests (224 backend + 166 frontend). Drop in an OpenCode Zen model when you want a real LLM.
+> SSE API, the frontend, and all 391 tests (224 backend + 167 frontend). Drop in an OpenCode Zen model when you want a real LLM.
 
 **Explore:** [Quickstart](#-quickstart) · [Architecture](#architecture) · [System design](#system-design) · [Try the MVP scenario](#try-the-mvp-scenario) · [Design system](#design-system) · [Real model](#use-a-real-model)
 
@@ -176,7 +176,7 @@ Node 22 + npm for the frontend. No API key needed.
 ```bash
 git clone https://github.com/Zahrannnn/agentic-shop && cd agentic-shop/backend
 uv sync
-uv run pytest                          # 209 tests, fully offline (mock mode)
+uv run pytest                          # 224 tests, fully offline (mock mode)
 uv run uvicorn app.main:app --reload   # LLM_MODE=mock is the default
 ```
 
