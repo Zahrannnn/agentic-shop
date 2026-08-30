@@ -111,12 +111,26 @@ class ComparisonTableProps(BaseModel):
 
 
 class ProductDetailsProps(BaseModel):
-    """Props for ``product_details``; ``show_quotes`` toggles review quotes."""
+    """Props for ``product_details``; ``show_quotes`` toggles review quotes.
+    The catalog snapshot fields (name/brand/price/attributes/scores) travel
+    with the plan so the client renders a complete card without a lookup."""
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     product_id: str
     show_quotes: bool
+    product_name: str | None = None
+    brand: str | None = None
+    price_usd: float | None = None
+    battery_hours: float | None = None
+    weight_g: float | None = None
+    anc_type: str | None = None
+    driver_mm: float | None = None
+    codecs: list[str] | None = None
+    multipoint: bool | None = None
+    folding: bool | None = None
+    review_scores: dict[str, float] | None = None
+    quotes: list[str] | None = None
 
 
 class CartLine(BaseModel):

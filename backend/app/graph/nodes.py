@@ -884,6 +884,31 @@ def _comparison_value(product: Product, attribute: str) -> Any:
     return getattr(product, attribute, None)
 
 
+def _details_snapshot(product: Product) -> dict[str, Any]:
+    """Catalog snapshot for a ``product_details`` card: the fields travel with
+    the plan so the client renders a complete card without a lookup."""
+
+    def scores(attr: str) -> Any:
+        return getattr(product.review_scores, attr, None)
+
+    return {
+        "product_name": product.name,
+        "brand": product.brand,
+        "price_usd": product.price_usd,
+        "battery_hours": product.battery_hours,
+        "weight_g": product.weight_g,
+        "anc_type": product.anc_type,
+        "driver_mm": product.driver_mm,
+        "codecs": list(product.codecs),
+        "multipoint": product.multipoint,
+        "folding": product.folding,
+        "review_scores": {
+            attr: scores(attr) for attr in ("comfort", "anc", "sound", "battery", "value")
+        },
+        "quotes": list(product.quotes),
+    }
+
+
 def _build_followup_plan(
     state: ShoppingState, followup: dict[str, Any]
 ) -> tuple[UIPlan, dict[str, Any]]:
@@ -937,11 +962,16 @@ def _build_followup_plan(
         )
         return plan, {"selected_ids": ordered}
     if kind == "details":
+        catalog_by_id = {p.id: p for p in get_catalog()}
         plan = UIPlan(
             **_envelope(state),
             root=ComponentNode(
                 type="product_details",
-                props=ProductDetailsProps(product_id=targets[0], show_quotes=True),
+                props=ProductDetailsProps(
+                    product_id=targets[0],
+                    show_quotes=True,
+                    **_details_snapshot(catalog_by_id[targets[0]]),
+                ),
             ),
         )
         return plan, {"selected_ids": [targets[0]]}
