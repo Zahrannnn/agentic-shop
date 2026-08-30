@@ -327,8 +327,8 @@ describe("validateProductRefs", () => {
 });
 
 describe("catalog mirror", () => {
-  it("holds exactly 28 ids", () => {
-    expect(CATALOG_IDS.size).toBe(28);
+  it("holds exactly 38 ids", () => {
+    expect(CATALOG_IDS.size).toBe(38);
   });
 
   it("contains the four canonical ids", () => {
