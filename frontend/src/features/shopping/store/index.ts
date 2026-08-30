@@ -1,5 +1,6 @@
 export {
   SESSION_STORAGE_KEY,
+  hydrateSession,
   loadInitialSessionState,
   persistSessionMiddleware,
   resetSessionExpired,

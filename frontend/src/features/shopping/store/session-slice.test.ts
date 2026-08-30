@@ -1,9 +1,10 @@
 import { configureStore } from "@reduxjs/toolkit";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RootState } from "@/shared/store/store";
 import { transcriptCleared } from "./transcript-slice";
 import {
   SESSION_STORAGE_KEY,
+  hydrateSession,
   loadInitialSessionState,
   persistSessionMiddleware,
   resetSessionExpired,
@@ -26,7 +27,31 @@ function createTestStore() {
   });
 }
 
+describe("loadInitialSessionState", () => {
+  it("returns a blank id on the server (no randomness during prerender)", () => {
+    const windowSpy = vi.spyOn(globalThis, "window", "get");
+    windowSpy.mockReturnValue(undefined as unknown as Window & typeof globalThis);
+
+    expect(loadInitialSessionState()).toEqual({ sessionId: "", live: true });
+
+    windowSpy.mockRestore();
+  });
+});
+
 describe("session reducers", () => {
+  it("hydrateSession fills an empty id from storage or mints a fresh one", () => {
+    window.sessionStorage.clear();
+    const before: SessionState = { sessionId: "", live: true };
+    const after = sessionReducer(before, hydrateSession());
+    expect(after.sessionId).toMatch(UUID_PATTERN);
+    expect(after.live).toBe(true);
+  });
+
+  it("hydrateSession is a no-op when an id is already set", () => {
+    const before: SessionState = { sessionId: "sess-stable-1", live: true };
+    expect(sessionReducer(before, hydrateSession())).toBe(before);
+  });
+
   it("startNewSession mints a uuid and marks the session live", () => {
     const before: SessionState = {
       sessionId: "00000000-0000-4000-8000-000000000000",

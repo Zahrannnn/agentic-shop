@@ -66,15 +66,13 @@ function persistSessionState(state: SessionState): void {
 }
 
 /**
- * Initial state for the session slice, read once at store creation. On the
- * server (or any environment without sessionStorage) this mints a fresh
- * session; in the browser it rehydrates the tab-scoped conversation identity
- * so a reload can resume with `resume: true` (FRONTEND_GUIDE.md §6). A
- * missing, corrupt, or wrong-shaped snapshot falls back to a fresh session.
+ * Initial state for the session slice. On the server (or any environment
+ * without sessionStorage) this returns a blank id — no randomness, so static
+ * prerender stays valid. The StoreProvider hydrates the real id on mount.
  */
 export function loadInitialSessionState(): SessionState {
   if (typeof window === "undefined") {
-    return { sessionId: createSessionId(), live: true };
+    return { sessionId: "", live: true };
   }
   try {
     const raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
@@ -117,6 +115,18 @@ export const sessionSlice = createSlice({
   name: "session",
   initialState: loadInitialSessionState(),
   reducers: {
+    /**
+     * Client-only hydration: fills an empty session id from sessionStorage
+     * or mints a fresh one. Safe to call on every mount; no-op when already set.
+     */
+    hydrateSession: (state) => {
+      if (state.sessionId.length > 0) {
+        return;
+      }
+      const loaded = loadInitialSessionState();
+      state.sessionId = loaded.sessionId;
+      state.live = loaded.live;
+    },
     /** Start a brand-new conversation with a freshly minted session id. */
     startNewSession: (state) => {
       state.sessionId = createSessionId();
@@ -140,7 +150,7 @@ export const sessionSlice = createSlice({
   },
 });
 
-export const { startNewSession, resetSessionExpired } =
+export const { hydrateSession, startNewSession, resetSessionExpired } =
   sessionSlice.actions;
 
 export const selectSessionId = (state: RootState): string =>

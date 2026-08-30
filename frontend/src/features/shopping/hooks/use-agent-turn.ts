@@ -60,7 +60,7 @@ import { parseUiPlan } from "../validations/plan-schema";
  * same tick (StrictMode-style double events) are still a no-op.
  */
 
-const SESSION_EXPIRED_MESSAGE = "Session expired — starting a fresh conversation.";
+const SESSION_EXPIRED_MESSAGE = "Session expired. Starting a fresh conversation.";
 const TURN_IN_FLIGHT_MESSAGE =
   "Another reply is still in progress. Please wait for it to finish.";
 const CONNECTION_LOST_MESSAGE = "Connection lost before the reply finished. Please try again.";

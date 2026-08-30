@@ -35,7 +35,7 @@ comparisons, and cart views. No pages, no navigation — just a transcript.
 | ![The storefront](docs/screenshots/shop-empty.png) | ![Recommendation turn](docs/screenshots/shop-recommendation.png) |
 | **The storefront** — light "Curator's Desk" surface, suggestion chips, Browse catalog, REAL/MOCK badge | **Recommendation turn** — streamed reasoning, ranked ecommerce cards with prices and ANC badges |
 | ![Comparison](docs/screenshots/shop-compare.png) | ![Details](docs/screenshots/shop-details.png) |
-| **Comparison** — side-by-side attributes, values straight from the catalog | **Details** — full catalog snapshot card with reviewer quotes |
+| **Comparison arena** — spec scoreboard with win counts and Best cells, values straight from the catalog | **Details** — full catalog snapshot card with reviewer quotes |
 | ![Catalog sheet](docs/screenshots/shop-catalog-sheet.png) | |
 | **Catalog sheet** — browse all 38 products, one tap asks the agent | |
 
@@ -314,7 +314,7 @@ npm run verify        # eslint + tsc --noEmit + vitest + next build
   implement); every plan is gated against the project constitution
   (`.specify/memory/constitution.md`).
 - **Design**: frontend work follows `PRODUCT.md` + `DESIGN.md` (the Curator's Desk
-  doctrine — restrained light palette, one teal-ink accent, editorial type, the
+  doctrine — warm cream palette, one coral accent, editorial type, the
   named anti-slop bans).
 - **Commits**: Conventional Commits, small focused PRs (PR template included).
 - **Next up**: Phase 2 polish — real-mode latency UX, catalog browsing beyond the

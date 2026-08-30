@@ -634,7 +634,7 @@ describe("ShopPage 404 flow", () => {
 
     const notice = await screen.findByTestId("session-expired-notice");
     expect(notice).toHaveTextContent(
-      "Session expired — starting a fresh conversation.",
+      "Session expired. Starting a fresh conversation.",
     );
     expect(send).toHaveBeenCalledWith({
       message: "still there?",
