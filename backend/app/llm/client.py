@@ -89,7 +89,16 @@ _USE_CASE_RE = re.compile(r"\bfor\s+([^\n]+)", re.IGNORECASE)
 #: under $200" -> "long flights").
 _USE_CASE_CUT_RE = re.compile(r"[.,;!?]|\bunder\b\s*\$?\s*\d|\$\s?\d")
 _BUDGET_RE = re.compile(r"\$\s?(\d[\d,]*)")
-_CATEGORY_HEADPHONE_RE = re.compile(r"headphones?\b")
+#: Category patterns in fixed precedence order (determinism, constitution III):
+#: the FIRST matching pattern wins, so a message that somehow names both
+#: categories is classified as the earlier entry ("headphones"). "headphones"
+#: never contains the earbud spellings and vice versa, so the order only
+#: matters for pathological multi-category messages — documented here and
+#: pinned by tests.
+_CATEGORY_PATTERNS: tuple[tuple[str, str], ...] = (
+    (r"headphones?\b", "headphones"),
+    (r"ear[\s-]?buds?\b", "earbuds"),
+)
 
 
 class StructuredOutputError(RuntimeError):
@@ -245,7 +254,10 @@ def _intent_extraction_handler(text: str, context: dict[str, Any]) -> dict[str, 
         # Emit both spellings; field filtering keeps whichever the schema uses.
         data["budget"] = budget
         data["budget_usd"] = budget
-    data["category"] = "headphones" if _CATEGORY_HEADPHONE_RE.search(lowered) else None
+    data["category"] = next(
+        (slug for pattern, slug in _CATEGORY_PATTERNS if re.search(pattern, lowered)),
+        None,
+    )
     priorities: dict[str, float] = {}
     for pattern, key in _INTENT_PRIORITY_PATTERNS:
         if key not in priorities and re.search(pattern, lowered):

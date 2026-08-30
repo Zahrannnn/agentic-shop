@@ -37,7 +37,7 @@ from app.tools.search import SearchFilters, relax_filters, search_products
 
 @pytest.fixture
 def catalog() -> list[Product]:
-    """The real curated catalog (28 validated products, sorted by id)."""
+    """The real curated catalog (38 validated products, sorted by id)."""
     return load_catalog()
 
 
@@ -51,13 +51,22 @@ class TestSearchProducts:
 
     def test_filter_by_category(self, catalog: list[Product]) -> None:
         results = search_products(catalog, SearchFilters(category="headphones"))
-        assert [p.id for p in results] == [p.id for p in catalog]
+        expected = [p.id for p in catalog if p.category == "headphones"]
+        assert [p.id for p in results] == expected
+
+    def test_filter_by_second_category_earbuds(self, catalog: list[Product]) -> None:
+        results = search_products(catalog, SearchFilters(category="earbuds"))
+        expected = [p.id for p in catalog if p.category == "earbuds"]
+        assert len(expected) == 10  # the second curated category
+        assert [p.id for p in results] == expected
+        assert all(p.category == "earbuds" for p in results)
 
     def test_category_is_case_insensitive_and_stripped(self, catalog: list[Product]) -> None:
         upper = search_products(catalog, SearchFilters(category="HEADPHONES"))
         padded = search_products(catalog, SearchFilters(category="  Headphones "))
-        assert [p.id for p in upper] == [p.id for p in catalog]
-        assert [p.id for p in padded] == [p.id for p in catalog]
+        expected = [p.id for p in catalog if p.category == "headphones"]
+        assert [p.id for p in upper] == expected
+        assert [p.id for p in padded] == expected
 
     def test_unknown_category_returns_empty(self, catalog: list[Product]) -> None:
         assert search_products(catalog, SearchFilters(category="speakers")) == []
@@ -81,15 +90,21 @@ class TestSearchProducts:
 
     def test_require_anc_excludes_anc_type_none(self, catalog: list[Product]) -> None:
         results = search_products(catalog, SearchFilters(require_anc=True))
-        assert len(results) == 22  # 28 catalog items minus the 6 with anc_type "none"
+        assert len(results) == 29  # 38 catalog items minus the 9 with anc_type "none"
         assert all(p.anc_type != ANCType.NONE for p in results)
         # "passive" counts as noise control (require_anc := anc_type != none).
         passive_ids = {p.id for p in results if p.anc_type == ANCType.PASSIVE}
-        assert passive_ids == {"coralfield-flex", "harbor-lite-anc", "velvetone-jazz-1"}
+        assert passive_ids == {
+            "coralfield-flex",
+            "harbor-lite-anc",
+            "nimblepod-daily",
+            "velvetone-jazz-1",
+            "wavelet-core-buds",
+        }
 
     def test_default_filters_keep_everything(self, catalog: list[Product]) -> None:
         results = search_products(catalog, SearchFilters())
-        assert len(results) == 28
+        assert len(results) == 38
 
     def test_codecs_single(self, catalog: list[Product]) -> None:
         results = search_products(catalog, SearchFilters(codecs=("ldac",)))
@@ -125,14 +140,14 @@ class TestSearchProducts:
         no = search_products(catalog, SearchFilters(multipoint=False))
         assert all(p.multipoint for p in yes)
         assert not any(p.multipoint for p in no)
-        assert len(yes) + len(no) == 28
+        assert len(yes) + len(no) == 38
 
     def test_folding_flag(self, catalog: list[Product]) -> None:
         yes = search_products(catalog, SearchFilters(folding=True))
         no = search_products(catalog, SearchFilters(folding=False))
         assert all(p.folding for p in yes)
         assert not any(p.folding for p in no)
-        assert len(yes) + len(no) == 28
+        assert len(yes) + len(no) == 38
 
     def test_combined_filters(self, catalog: list[Product]) -> None:
         filters = SearchFilters(
