@@ -63,6 +63,18 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  /* comparison arena column identities (data roles, not accents) */
+  --color-compare-1: oklch(45% 0.08 200);
+  --color-compare-1-fg: oklch(38% 0.08 200);
+  --color-compare-1-bg: oklch(94.5% 0.02 200);
+  --color-compare-2: oklch(35% 0.02 260);
+  --color-compare-2-fg: oklch(30% 0.02 260);
+  --color-compare-2-bg: oklch(94.5% 0.006 260);
+  --color-compare-3: oklch(38% 0.015 200);
+  --color-compare-3-fg: oklch(32% 0.015 200);
+  --color-compare-3-bg: oklch(94.5% 0.006 200);
+  --color-success-fg: oklch(42% 0.1 150);
+  --color-warning-fg: oklch(48% 0.11 80);
   --color-compare-1: var(--compare-1);
   --color-compare-1-bg: var(--compare-1-bg);
   --color-compare-1-fg: var(--compare-1-fg);

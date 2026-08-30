@@ -24,7 +24,7 @@ function Sidebar() {
   return (
     <nav className="flex h-full flex-col gap-2">
       <Link href={routes.shop} className="mb-4 px-2 text-sm font-semibold">
-        CORELIA
+        agentic-shop
       </Link>
       {navItems.map((item) => {
         const Icon = item.icon;

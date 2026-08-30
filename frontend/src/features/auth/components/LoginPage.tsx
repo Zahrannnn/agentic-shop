@@ -45,7 +45,7 @@ export function LoginPage() {
                 id="email"
                 name="email"
                 type="email"
-                defaultValue="lead@corelia.local"
+                defaultValue="you@example.com"
                 required
               />
             </div>
