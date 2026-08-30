@@ -95,11 +95,32 @@ const comparisonTableComponentSchema = z.object({
   actions: z.array(planActionSchema),
 });
 
+const reviewScoresSchema = z.object({
+  comfort: z.number(),
+  anc: z.number(),
+  sound: z.number(),
+  battery: z.number(),
+  value: z.number(),
+});
+
 const productDetailsComponentSchema = z.object({
   type: z.literal("product_details"),
   props: z.object({
     productId: z.string().min(1),
     showQuotes: z.boolean(),
+    /** Catalog snapshot fields (additive): present on current plans. */
+    productName: z.string().min(1).optional(),
+    brand: z.string().min(1).optional(),
+    priceUsd: z.number().optional(),
+    batteryHours: z.number().optional(),
+    weightG: z.number().optional(),
+    ancType: z.string().min(1).optional(),
+    driverMm: z.number().optional(),
+    codecs: z.array(z.string()).optional(),
+    multipoint: z.boolean().optional(),
+    folding: z.boolean().optional(),
+    reviewScores: reviewScoresSchema.partial().optional(),
+    quotes: z.array(z.string()).optional(),
   }),
   actions: z.array(planActionSchema),
 });

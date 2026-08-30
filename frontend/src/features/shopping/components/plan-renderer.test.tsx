@@ -174,15 +174,19 @@ describe("PlanRenderer with the comparison-table fixture", () => {
 });
 
 describe("PlanRenderer with the product-details fixture", () => {
-  it("renders the mono id, the quotes placeholder, and no actions", () => {
+  it("renders the full detail card from the fixture snapshot", () => {
     const plan = parseFixture("product-details");
     expectRoot(plan, "product_details");
     const onAction = renderPlan(plan);
 
     expect(screen.getByTestId("plan-product_details")).toBeInTheDocument();
+    expect(screen.getByText("Aurora Hush Pro")).toBeInTheDocument();
     expect(screen.getByText("aurora-hush-pro")).toBeInTheDocument();
-    expect(screen.getByTestId("quotes-placeholder")).toBeInTheDocument();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getByTestId("details-price")).toHaveTextContent("$179.00");
+    expect(screen.getByText("adaptive")).toBeInTheDocument();
+    expect(screen.getByText("What reviewers say")).toBeInTheDocument();
+    expect(screen.getAllByTestId(/^quote-/)).toHaveLength(2);
+    expect(screen.queryByTestId("quotes-placeholder")).not.toBeInTheDocument();
     expect(onAction).not.toHaveBeenCalled();
   });
 });
