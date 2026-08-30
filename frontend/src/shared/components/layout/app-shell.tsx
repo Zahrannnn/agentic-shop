@@ -14,8 +14,7 @@ import { cn } from "@/shared/utils/cn";
 import { useAuth } from "@/features/auth";
 
 const navItems = [
-  { label: "Dashboard", href: routes.dashboard, icon: LayoutDashboard },
-  { label: "Profile", href: routes.profile, icon: UserRound },
+  { label: "Shop", href: routes.shop, icon: LayoutDashboard },
   { label: "Health", href: routes.health, icon: HeartPulse },
 ];
 
@@ -24,7 +23,7 @@ function Sidebar() {
 
   return (
     <nav className="flex h-full flex-col gap-2">
-      <Link href={routes.welcome} className="mb-4 px-2 text-sm font-semibold">
+      <Link href={routes.shop} className="mb-4 px-2 text-sm font-semibold">
         CORELIA
       </Link>
       {navItems.map((item) => {

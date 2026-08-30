@@ -11,7 +11,7 @@ export default function NotFound() {
         description="The route does not exist in this boilerplate."
         action={
           <Button asChild>
-            <Link href={routes.welcome}>Go home</Link>
+            <Link href={routes.shop}>Back to the shop</Link>
           </Button>
         }
       />

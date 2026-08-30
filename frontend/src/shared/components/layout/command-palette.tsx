@@ -9,9 +9,7 @@ import { routes } from "@/shared/constants/routes";
 import { useRateLimitedSearch } from "@/shared/hooks/use-rate-limited-search";
 
 const commands = [
-  { label: "Welcome", href: routes.welcome },
-  { label: "Dashboard", href: routes.dashboard },
-  { label: "Profile", href: routes.profile },
+  { label: "Shop", href: routes.shop },
   { label: "Health", href: routes.health },
 ];
 

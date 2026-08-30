@@ -4,10 +4,8 @@ import { routes } from "@/shared/constants/routes";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
-    routes.welcome,
+    routes.shop,
     routes.login,
-    routes.dashboard,
-    routes.profile,
     routes.health,
   ].map((route) => ({
     url: `${env.NEXT_PUBLIC_APP_URL}${route}`,

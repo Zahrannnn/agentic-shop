@@ -1,8 +1,7 @@
 export const routes = {
-  welcome: "/",
+  shop: "/shop",
+  catalog: "/shop",
   login: "/auth/login",
-  dashboard: "/dashboard",
-  profile: "/profile",
   health: "/health",
 } as const;
 

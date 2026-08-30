@@ -11,8 +11,7 @@ import type { RootState } from "@/shared/store/store";
  * `sessionId` is client-generated per conversation (a uuid, 36 chars — within
  * the 8–64 contract bound) and stays stable for the whole conversation. `live`
  * records whether the backend is known to still hold the session: it starts
- * `true` and is re-asserted by `markSessionLive` after a successful non-resume
- * turn; the 404 resume-recovery flow mints a brand-new id via
+ * `true`; the 404 resume-recovery flow mints a brand-new id via
  * `resetSessionExpired`.
  */
 export type SessionState = {
@@ -124,13 +123,6 @@ export const sessionSlice = createSlice({
       state.live = true;
     },
     /**
-     * Re-assert that the backend still holds the current session id (after a
-     * successful non-resume turn confirmed it).
-     */
-    markSessionLive: (state) => {
-      state.live = true;
-    },
-    /**
      * 404 resume-recovery (FRONTEND_GUIDE.md §6.3): the backend no longer
      * knows the current id, so mint a fresh one. The turn pipeline dispatches
      * `transcriptCleared` right after this to reset the visible transcript.
@@ -148,7 +140,7 @@ export const sessionSlice = createSlice({
   },
 });
 
-export const { startNewSession, markSessionLive, resetSessionExpired } =
+export const { startNewSession, resetSessionExpired } =
   sessionSlice.actions;
 
 export const selectSessionId = (state: RootState): string =>

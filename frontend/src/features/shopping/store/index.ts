@@ -1,7 +1,6 @@
 export {
   SESSION_STORAGE_KEY,
   loadInitialSessionState,
-  markSessionLive,
   persistSessionMiddleware,
   resetSessionExpired,
   selectSessionId,
