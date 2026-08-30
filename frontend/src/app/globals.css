@@ -104,6 +104,40 @@ textarea {
   outline-color: var(--ring);
 }
 
+/* Motion doctrine (DESIGN.md): ease-out, opacity/transform only, collapsed
+ * by the reduced-motion block above. */
+@keyframes turn-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-turn-in {
+  animation: turn-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.streaming-caret::after {
+  content: "▍";
+  margin-left: 1px;
+  color: var(--primary);
+  animation: caret-pulse 1s ease-in-out infinite;
+}
+
+@keyframes caret-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+
 /* DESIGN.md: reduced motion collapses transitions to opacity only. */
 @media (prefers-reduced-motion: reduce) {
   html {

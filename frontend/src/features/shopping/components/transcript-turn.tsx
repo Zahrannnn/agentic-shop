@@ -95,7 +95,7 @@ export function TranscriptTurn({
         : null;
 
   return (
-    <article data-testid="transcript-turn" className="space-y-4">
+    <article data-testid="transcript-turn" className="animate-turn-in space-y-4">
       {turn.userText !== null ? (
         <div className="flex justify-end">
           <p className="max-w-prose rounded-lg bg-secondary px-4 py-2.5 text-[15px] leading-[1.6] text-secondary-foreground">
@@ -116,6 +116,7 @@ export function TranscriptTurn({
             aria-live={isLatest ? "polite" : undefined}
             className={cn(
               "max-w-prose text-[15px] leading-[1.6] whitespace-pre-wrap",
+              working && "streaming-caret",
             )}
           >
             {turnProse(turn)}
