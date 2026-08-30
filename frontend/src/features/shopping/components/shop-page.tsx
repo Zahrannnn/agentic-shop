@@ -51,6 +51,21 @@ const SUGGESTIONS: { label: string; prompt: string }[] = [
   },
 ];
 
+/** Contextual next steps for a rendered plan (workbench, not chat). */
+function quickRepliesFor(plan: unknown): string[] {
+  const rootType = (plan as { root?: { type?: string } } | null)?.root?.type;
+  switch (rootType) {
+    case "product_grid":
+      return ["Compare the first two", "Add the first one to my cart"];
+    case "comparison_table":
+      return ["Add the first one to my cart", "Tell me more about the second one"];
+    case "product_details":
+      return ["Add it to my cart"];
+    default:
+      return [];
+  }
+}
+
 function hasRehydratedSession(): boolean {
   if (typeof window === "undefined") {
     return false;
@@ -140,6 +155,14 @@ export function ShopPage() {
 
   const streaming = phase === "streaming";
 
+  // Contextual quick replies: derived from the latest rendered plan so the
+  // next step is one tap (workbench, not chat).
+  const latestTurn = turns.at(-1) ?? null;
+  const quickReplies =
+    !isBusy && latestTurn?.planState === "rendered"
+      ? quickRepliesFor(latestTurn.plan)
+      : [];
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-10 border-b bg-background">
@@ -199,6 +222,21 @@ export function ShopPage() {
               ))}
             </ol>
           )}
+          {quickReplies.length > 0 ? (
+            <div className="mt-6 flex flex-wrap gap-2" data-testid="quick-replies">
+              {quickReplies.map((reply) => (
+                <Button
+                  key={reply}
+                  variant="outline"
+                  size="sm"
+                  data-testid="quick-reply"
+                  onClick={() => handleSendText(reply)}
+                >
+                  {reply}
+                </Button>
+              ))}
+            </div>
+          ) : null}
           <div ref={transcriptEndRef} aria-hidden="true" />
         </div>
       </main>

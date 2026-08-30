@@ -30,7 +30,6 @@ function formatAttribute(
 }
 
 export function ProductDetails({ props }: ProductDetailsComponentProps) {
-  const hasSnapshot = props.productName !== undefined;
   const attributes = [
     formatAttribute("Price", props.priceUsd !== undefined ? `$${props.priceUsd.toFixed(2)}` : undefined),
     formatAttribute("Battery", props.batteryHours, "h"),

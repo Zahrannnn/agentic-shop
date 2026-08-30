@@ -97,10 +97,11 @@ export function TranscriptTurn({
   return (
     <article data-testid="transcript-turn" className="animate-turn-in space-y-4">
       {turn.userText !== null ? (
-        <div className="flex justify-end">
-          <p className="max-w-prose rounded-lg bg-secondary px-4 py-2.5 text-[15px] leading-[1.6] text-secondary-foreground">
-            {turn.userText}
+        <div className="max-w-prose">
+          <p className="text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
+            You asked
           </p>
+          <p className="mt-1 text-[15px] leading-[1.6]">{turn.userText}</p>
         </div>
       ) : null}
 

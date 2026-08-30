@@ -325,6 +325,53 @@ describe("ShopPage thinking states", () => {
     });
   });
 
+  it("offers contextual quick replies after a rendered plan and sends on click", () => {
+    const send = vi.fn(
+      async (): Promise<SendOutcomeLike> => ({ kind: "started" }),
+    );
+    setHook({
+      send,
+      turns: [
+        makeTurn({
+          id: 1,
+          userText: "headphones for flights",
+          deltas: "Here are my picks.",
+          planState: "rendered",
+          plan: {
+            planVersion: "1",
+            sessionId: SESSION_ID,
+            turnId: 1,
+            root: {
+              type: "product_grid",
+              props: { title: "Picks", productIds: ["aurora-hush-pro"], ranked: true },
+              actions: [],
+            },
+          },
+          terminal: { kind: "turn_end" },
+        }),
+      ],
+    });
+    render(<ShopPage />);
+
+    const replies = screen.getAllByTestId("quick-reply");
+    expect(replies).toHaveLength(2);
+    fireEvent.click(replies[0]);
+    expect(send).toHaveBeenCalledWith({
+      message: "Compare the first two",
+      resume: false,
+    });
+  });
+
+  it("hides quick replies while a turn is streaming", () => {
+    setHook({
+      phase: "streaming",
+      isBusy: true,
+      turns: [makeTurn({ id: 1, userText: "hello" })],
+    });
+    render(<ShopPage />);
+    expect(screen.queryByTestId("quick-replies")).not.toBeInTheDocument();
+  });
+
   it("scrolls the newest turn into view as turns arrive", () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
