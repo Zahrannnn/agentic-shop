@@ -13,6 +13,11 @@
         "type": "remove_from_cart",
         "label": "Remove",
         "payload": { "productId": "aurora-hush-pro" }
+      },
+      {
+        "type": "set_quantity",
+        "label": "+",
+        "payload": { "productId": "aurora-hush-pro", "quantity": 2 }
       }
     ]
   }

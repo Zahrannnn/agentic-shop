@@ -16,7 +16,9 @@ import type { CartViewProps, PlanAction } from "../../validations/plan-schema";
  * quantities, closed by a "Total" footer row. Line prices are not in the wire
  * contract, so no price column exists — only `totalUsd`, rendered in the mono
  * tabular cut (The Numerals Rule). Each item carries its matching
- * `remove_from_cart` action, dispatched verbatim.
+ * `remove_from_cart` action, dispatched verbatim, and its `set_quantity`
+ * steppers (D11): the backend emits one action per allowed step (clamped at
+ * the 1–10 bounds), rendered as −/+ controls flanking the tabular quantity.
  */
 export type CartViewComponentProps = {
   props: CartViewProps;
@@ -46,11 +48,32 @@ export function CartView({ props, actions, onAction }: CartViewComponentProps) {
                 action.type === "remove_from_cart" &&
                 action.payload.productId === item.productId,
             );
+            const steps = actions.filter(
+              (action) =>
+                action.type === "set_quantity" &&
+                action.payload.productId === item.productId,
+            );
             return (
               <TableRow key={item.productId} data-product-id={item.productId}>
                 <TableCell className="font-mono text-sm">{item.productId}</TableCell>
-                <TableCell className="text-right font-mono tabular-nums">
-                  {item.quantity}
+                <TableCell className="text-right">
+                  <span className="inline-flex items-center justify-end gap-2">
+                    {steps.map((step) => (
+                      <Button
+                        key={String(step.payload.quantity)}
+                        variant="outline"
+                        size="sm"
+                        className="h-7 w-7 px-0 font-mono tabular-nums"
+                        data-testid="action-set_quantity"
+                        data-target-quantity={String(step.payload.quantity)}
+                        aria-label={`${item.productId} — ${step.label}`}
+                        onClick={() => onAction(step)}
+                      >
+                        {step.label}
+                      </Button>
+                    ))}
+                    <span className="min-w-6 font-mono tabular-nums">{item.quantity}</span>
+                  </span>
                 </TableCell>
                 <TableCell className="text-right">
                   {removeAction ? (

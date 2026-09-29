@@ -23,7 +23,13 @@
             "grid-title",
             "grid-caption",
             "product-list",
-            "grid-action-0"
+            "grid-action-0",
+            "grid-action-1",
+            "grid-action-2",
+            "grid-action-3",
+            "grid-action-4",
+            "grid-action-5",
+            "grid-action-6"
           ]
         },
         {
@@ -139,6 +145,120 @@
               "name": "compare",
               "context": {
                 "label": "Compare"
+              }
+            }
+          }
+        },
+        {
+          "id": "grid-action-text-1",
+          "component": "Text",
+          "text": "Top rated"
+        },
+        {
+          "id": "grid-action-1",
+          "component": "Button",
+          "child": "grid-action-text-1",
+          "action": {
+            "event": {
+              "name": "refine",
+              "context": {
+                "sort": "rating",
+                "label": "Top rated"
+              }
+            }
+          }
+        },
+        {
+          "id": "grid-action-text-2",
+          "component": "Text",
+          "text": "Price: low to high"
+        },
+        {
+          "id": "grid-action-2",
+          "component": "Button",
+          "child": "grid-action-text-2",
+          "action": {
+            "event": {
+              "name": "refine",
+              "context": {
+                "sort": "price_asc",
+                "label": "Price: low to high"
+              }
+            }
+          }
+        },
+        {
+          "id": "grid-action-text-3",
+          "component": "Text",
+          "text": "Price: high to low"
+        },
+        {
+          "id": "grid-action-3",
+          "component": "Button",
+          "child": "grid-action-text-3",
+          "action": {
+            "event": {
+              "name": "refine",
+              "context": {
+                "sort": "price_desc",
+                "label": "Price: high to low"
+              }
+            }
+          }
+        },
+        {
+          "id": "grid-action-text-4",
+          "component": "Text",
+          "text": "ANC only"
+        },
+        {
+          "id": "grid-action-4",
+          "component": "Button",
+          "child": "grid-action-text-4",
+          "action": {
+            "event": {
+              "name": "refine",
+              "context": {
+                "ancOnly": true,
+                "label": "ANC only"
+              }
+            }
+          }
+        },
+        {
+          "id": "grid-action-text-5",
+          "component": "Text",
+          "text": "40h+ battery"
+        },
+        {
+          "id": "grid-action-5",
+          "component": "Button",
+          "child": "grid-action-text-5",
+          "action": {
+            "event": {
+              "name": "refine",
+              "context": {
+                "minBatteryHours": 40,
+                "label": "40h+ battery"
+              }
+            }
+          }
+        },
+        {
+          "id": "grid-action-text-6",
+          "component": "Text",
+          "text": "Under $150"
+        },
+        {
+          "id": "grid-action-6",
+          "component": "Button",
+          "child": "grid-action-text-6",
+          "action": {
+            "event": {
+              "name": "refine",
+              "context": {
+                "maxPriceUsd": 150,
+                "label": "Under $150"
               }
             }
           }

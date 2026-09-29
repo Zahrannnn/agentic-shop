@@ -27,6 +27,7 @@ const FIXTURE_NAMES = [
   "comparison-two",
   "product-details",
   "cart-one-item",
+  "multi-picker-priorities",
 ] as const;
 
 type FixtureName = (typeof FIXTURE_NAMES)[number];
@@ -81,19 +82,43 @@ describe("fixture acceptance (backend fixtures parse through the gate)", () => {
       "maple-ridge-comfort-150",
     ]);
     expect(root.props.ranked).toBe(true);
+    // D11: the grid carries its refinement state and the chip table that
+    // re-targets it; card actions and chips coexist on one node.
+    expect(root.props.refinement).toEqual({ sort: "relevance", filters: {} });
     expect(root.actions.map((action) => action.type)).toEqual([
       "compare",
       "details",
       "add_to_cart",
+      "refine",
+      "refine",
+      "refine",
+      "refine",
+      "refine",
+      "refine",
     ]);
-    expect(root.actions.map((action) => action.label)).toEqual([
-      "Compare",
-      "Details",
-      "Add to cart",
+    expect(root.actions.slice(3).map((action) => action.payload)).toEqual([
+      { sort: "rating" },
+      { sort: "price_asc" },
+      { sort: "price_desc" },
+      { ancOnly: true },
+      { minBatteryHours: 40 },
+      { maxPriceUsd: 150 },
     ]);
     expect(plan.planVersion).toBe("1");
     expect(plan.sessionId).toBe("spec-fixture");
     expect(plan.turnId).toBe(1);
+  });
+
+  it("round-trips the multi-picker fixture", () => {
+    const { plan } = expectOk(parseUiPlan(loadFixture("multi-picker-priorities"), CATALOG_IDS));
+    const root = expectRoot(plan, "multi_picker");
+    expect(root.props.question).toBe("What matters most? Pick up to 2.");
+    expect(root.props.options).toHaveLength(5);
+    expect(root.props.maxSelect).toBe(2);
+    // The unstamped wire template: one action, empty values.
+    expect(root.actions).toHaveLength(1);
+    expect(root.actions[0]?.type).toBe("select_preferences");
+    expect(root.actions[0]?.payload.values).toEqual([]);
   });
 
   it("round-trips the preference picker fixture", () => {
@@ -181,6 +206,9 @@ describe("rejection matrix (known-bad mutations fail with an error string)", () 
       title: "Best matches for long flights",
       productIds: ["aurora-hush-pro", "off-catalog-thing"],
       ranked: true,
+      // Keep the D11 coupling intact: this mutation targets catalog refs,
+      // not the refinement bar.
+      refinement: { sort: "relevance", filters: {} },
     };
     const errors = expectRejected(parseUiPlan(raw, CATALOG_IDS));
     expect(errors.join("\n")).toContain("off-catalog-thing");
@@ -200,6 +228,7 @@ describe("rejection matrix (known-bad mutations fail with an error string)", () 
         "harbor-lite-anc",
       ],
       ranked: true,
+      refinement: { sort: "relevance", filters: {} },
     };
     expectRejected(parseUiPlan(raw, CATALOG_IDS));
   });
@@ -254,6 +283,70 @@ describe("rejection matrix (known-bad mutations fail with an error string)", () 
     const errors = expectRejected(parseUiPlan(raw, CATALOG_IDS));
     expect(errors.join("\n")).toContain("wifi_7");
   });
+
+  it("rejects refine chips on a grid without a refinement state (D11)", () => {
+    const raw = loadFixtureCopy("product-grid-flights");
+    const props = (raw.root as Record<string, unknown>).props as Record<string, unknown>;
+    delete props.refinement;
+    const errors = expectRejected(parseUiPlan(raw, CATALOG_IDS));
+    expect(errors.join("\n")).toContain("refinement");
+  });
+
+  it("rejects a refinement state without refine chips (D11)", () => {
+    const raw = loadFixtureCopy("product-grid-flights");
+    const root = raw.root as { actions: Array<{ type: string }> };
+    root.actions = root.actions.filter((action) => action.type !== "refine");
+    const errors = expectRejected(parseUiPlan(raw, CATALOG_IDS));
+    expect(errors.join("\n")).toContain("refine");
+  });
+
+  it("rejects a set_quantity payload outside the [1, 10] clamp (D11)", () => {
+    const raw = loadFixtureCopy("cart-one-item");
+    const root = raw.root as { actions: Array<{ type: string; payload: Record<string, unknown> }> };
+    root.actions[root.actions.length - 1].payload.quantity = 11;
+    const errors = expectRejected(parseUiPlan(raw, CATALOG_IDS));
+    expect(errors.join("\n")).toContain("set_quantity");
+  });
+
+  it("rejects a refine payload with an unknown sort and unknown keys (D11)", () => {
+    const raw = loadFixtureCopy("product-grid-flights");
+    const root = raw.root as {
+      actions: Array<{ type: string; payload: Record<string, unknown> }>;
+    };
+    const refine = root.actions.find((action) => action.type === "refine");
+    if (!refine) {
+      throw new Error("fixture lost its refine chips");
+    }
+    refine.payload = { sort: "vibes", cheapness: 5 };
+    const errors = expectRejected(parseUiPlan(raw, CATALOG_IDS));
+    const joined = errors.join("\n");
+    expect(joined).toContain("vibes");
+    expect(joined).toContain("cheapness");
+  });
+
+  it("rejects filled select_preferences values outside the options (D11)", () => {
+    const raw = loadFixtureCopy("multi-picker-priorities");
+    const root = raw.root as {
+      actions: Array<{ type: string; payload: Record<string, unknown> }>;
+    };
+    root.actions[0].payload.values = ["Noise cancellation", "Holographic bass"];
+    const errors = expectRejected(parseUiPlan(raw, CATALOG_IDS));
+    expect(errors.join("\n")).toContain("Holographic bass");
+  });
+
+  it("rejects select_preferences values over the maxSelect bound (D11)", () => {
+    const raw = loadFixtureCopy("multi-picker-priorities");
+    const root = raw.root as {
+      actions: Array<{ type: string; payload: Record<string, unknown> }>;
+    };
+    root.actions[0].payload.values = [
+      "Noise cancellation",
+      "Comfort",
+      "Battery life",
+    ];
+    const errors = expectRejected(parseUiPlan(raw, CATALOG_IDS));
+    expect(errors.join("\n")).toContain("maxSelect");
+  });
 });
 
 describe("validateProductRefs", () => {
@@ -265,7 +358,12 @@ describe("validateProductRefs", () => {
   it("flags a foreign payload productId on an add_to_cart action", () => {
     const raw = loadFixtureCopy("product-grid-flights");
     const root = raw.root as Record<string, unknown>;
+    // Keep the D11 refine chips so the refinement coupling stays satisfied —
+    // this test targets catalog-ref rules, not the bar.
     root.actions = [
+      ...((root.actions as Array<Record<string, unknown>>).filter(
+        (action) => action.type !== "add_to_cart",
+      )),
       { type: "add_to_cart", label: "Add to cart", payload: { productId: "off-catalog-thing" } },
     ];
     const { plan } = expectOk(parseUiPlan(raw));

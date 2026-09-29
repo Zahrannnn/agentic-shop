@@ -3,6 +3,7 @@
 import type { PlanAction, UiPlan } from "../validations/plan-schema";
 import { CartView } from "./components/cart-view";
 import { ComparisonTable } from "./components/comparison-table";
+import { MultiPicker } from "./components/multi-picker";
 import { PreferencePicker } from "./components/preference-picker";
 import { ProductDetails } from "./components/product-details";
 import { ProductGrid } from "./components/product-grid";
@@ -61,6 +62,14 @@ export function PlanRenderer({ plan, onAction }: PlanRendererProps) {
       );
     case "text_block":
       return <TextBlock props={root.props} />;
+    case "multi_picker":
+      return (
+        <MultiPicker
+          props={root.props}
+          actions={root.actions}
+          onAction={onAction}
+        />
+      );
     default:
       // Defensive floor only: the validation gate upstream makes this branch
       // unreachable for wire data. A quiet Pencil-tone notice — never a crash,

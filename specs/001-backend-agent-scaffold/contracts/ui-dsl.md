@@ -56,7 +56,18 @@ document when unset (fixtures stay non-amending).
 ```
 
 Rules: 1–6 `productIds`; `ranked` true means order is the recommendation
-order. Allowed actions: `compare`, `details`, `add_to_cart`.
+order. Allowed actions: `compare`, `details`, `add_to_cart`, `refine`.
+
+**Refinement bar (D11).** A grid MAY carry an optional `refinement` state
+(`{ "sort": "relevance"|"price_asc"|"price_desc"|"rating", "filters": {
+"ancOnly"?: bool, "minBatteryHours"?: number>0, "maxPriceUsd"?: number>0 } }`)
+and up to 8 `refine` actions — one per bar chip, each carrying its complete
+FLAT target payload (`sort` and/or `ancOnly` / `minBatteryHours` /
+`maxPriceUsd` at the payload's top level, never a nested object, so the chip
+rides an A2UI event context unchanged). The coupling is strict: a grid has a
+`refinement` state exactly when it has `refine` actions. Tapping a chip posts
+that action verbatim; the server re-runs search + ranking and emits a fresh
+grid whose `refinement` echoes the applied state.
 
 ### `preference_picker` (clarify chips)
 
@@ -126,15 +137,44 @@ standalone plan; every later cart turn supersedes that anchored plan in place.
     "totalUsd": 179.0
   },
   "actions": [
-    { "type": "remove_from_cart", "label": "Remove", "payload": { "productId": "aurora-hush-pro" } }
+    { "type": "remove_from_cart", "label": "Remove", "payload": { "productId": "aurora-hush-pro" } },
+    { "type": "set_quantity", "label": "+", "payload": { "productId": "aurora-hush-pro", "quantity": 2 } }
   ]
 }
 ```
+
+Rules (D11): allowed actions `remove_from_cart`, `set_quantity`. A
+`set_quantity` payload MUST carry the line's `productId` and the step's
+integer `quantity` clamped to [1, 10]; emitters only ship steps that are in
+bounds (no "+" at 10, no "−" at 1). Steppers render as −/+ controls flanking
+the tabular quantity.
 
 ### `text_block`
 
 `{ "heading"?: string, "body": string }` — used for assumption/contradiction
 disclosures; no actions.
+
+### `multi_picker` (D11)
+
+```json
+{
+  "type": "multi_picker",
+  "props": {
+    "question": "What matters most? Pick up to 2.",
+    "options": ["Noise cancellation", "Comfort", "Battery life", "Sound quality", "Value for money"],
+    "maxSelect": 2
+  },
+  "actions": [
+    { "type": "select_preferences", "label": "Show my picks", "payload": { "values": [] } }
+  ]
+}
+```
+
+Rules: 2–6 options; `maxSelect` 1–3 (default 2); exactly one
+`select_preferences` action. Its `values` list is the ONE sanctioned
+client-stamping exception (the `withProduct` precedent): the wire template
+ships `values: []` and the renderer fills it from the user's checks — a
+filled list MUST be a subset of `options` no longer than `maxSelect`.
 
 ## Validation rules (enforced backend-side before `ui_update`; mirrored in Zod later)
 
@@ -155,11 +195,12 @@ frontend phase:
 
 | Fixture | Covers |
 |---|---|
-| `product-grid-flights.json` | US1 recommendation turn |
+| `product-grid-flights.json` | US1 recommendation turn (with D11 refinement bar) |
 | `preference-picker-category.json` | US2 clarify turn |
 | `comparison-two.json` | US4 compare turn |
 | `product-details.json` | US4 inspect turn |
-| `cart-one-item.json` | US4 cart turn |
+| `cart-one-item.json` | US4 cart turn (with D11 stepper action) |
+| `multi-picker-priorities.json` | D11 multi-select priorities ask |
 
 Every fixture MUST validate against the backend DSL models
 (`tests/test_dsl.py` round-trips each through Pydantic and compares

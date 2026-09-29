@@ -93,6 +93,7 @@ def plan_to_a2ui_messages(plan: Mapping[str, Any]) -> list[dict[str, Any]]:
         "product_details": _details_components,
         "cart_view": _cart_components,
         "text_block": _text_block_components,
+        "multi_picker": _multi_picker_components,
     }[root["type"]]
     components, data = builder(root["props"], root.get("actions") or [])
 
@@ -164,9 +165,12 @@ def _grid_components(
         "products": products,
     }
     # Per-card actions are details/add_to_cart — the native renderer stamps
-    # productId at tap time; ``compare`` is grid-level (no product stamping).
-    card_actions = [action for action in actions if action["type"] != "compare"]
-    grid_actions = [action for action in actions if action["type"] == "compare"]
+    # productId at tap time. Everything else (compare, refine chips) is
+    # grid-level.
+    card_actions = [action for action in actions if action["type"] in ("details", "add_to_cart")]
+    grid_actions = [
+        action for action in actions if action["type"] not in ("details", "add_to_cart")
+    ]
 
     row_children = [
         "product-name",
@@ -426,12 +430,14 @@ def _cart_components(
     props: Mapping[str, Any], actions: list[Mapping[str, Any]]
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     items: list[Mapping[str, Any]] = list(props["items"])
-    remove_actions: dict[str, Mapping[str, Any]] = {}
+    # Per-line actions (remove, quantity steppers) grouped by productId in
+    # wire order; anything else falls to the trailing leftover row.
+    per_line: dict[str, list[Mapping[str, Any]]] = {}
     leftovers: list[Mapping[str, Any]] = []
     for action in actions:
         product_id = (action.get("payload") or {}).get("productId")
         if product_id is not None and any(item["productId"] == product_id for item in items):
-            remove_actions[str(product_id)] = action
+            per_line.setdefault(str(product_id), []).append(action)
         else:
             leftovers.append(action)
 
@@ -452,10 +458,10 @@ def _cart_components(
                 "variant": "caption",
             },
         ]
-        action = remove_actions.get(str(item["productId"]))
-        if action is not None:
-            row_children.append(f"cart-remove-{index}")
-            components += _button(index, "cart-remove", action, _action_context(action))
+        for line_index, action in enumerate(per_line.get(str(item["productId"]), [])):
+            button_id = f"cart-line-{index}-{line_index}"
+            row_children.append(button_id)
+            components += _button(line_index, button_id, action, _action_context(action))
         components.append({"id": f"cart-row-{index}", "component": "Row", "children": row_children})
     components.append(
         {"id": "cart-total", "component": "Text", "text": f"Total: ${_fmt(props['totalUsd'])}"}
@@ -463,6 +469,67 @@ def _cart_components(
     for index, action in enumerate(leftovers):
         components += _button(index, "extra", action, _action_context(action))
     return components, {}
+
+
+# ---------------------------------------------------------------------------
+# multi_picker (D11) — real CheckBox two-way bindings + one Apply button
+# ---------------------------------------------------------------------------
+
+
+def _multi_picker_components(
+    props: Mapping[str, Any], actions: list[Mapping[str, Any]]
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    options: list[str] = list(props["options"])
+    # CheckBox value paths point at /selections/<option>; the two-way binding
+    # writes check state into the data model. The Apply button posts
+    # select_preferences with an empty context — the client stamps `values`
+    # from the surface's data model at tap time (the same stamping exception
+    # the native renderer applies via its local checkbox state).
+    apply_action = next(
+        (action for action in actions if action["type"] == "select_preferences"), None
+    )
+    apply_ids: list[str] = ["multi-apply"] if apply_action is not None else []
+    components = _card(
+        [
+            "multi-question",
+            *(f"option-check-{index}" for index in range(len(options))),
+            *apply_ids,
+        ]
+    )
+    components.append(
+        {"id": "multi-question", "component": "Text", "text": props["question"], "variant": "h3"}
+    )
+    for index, option in enumerate(options):
+        components.append(
+            {
+                "id": f"option-check-{index}",
+                "component": "CheckBox",
+                "value": {"path": f"/selections/{option}"},
+                "label": option,
+            }
+        )
+    if apply_action is not None:
+        components.append(
+            {"id": "multi-apply-text", "component": "Text", "text": apply_action["label"]}
+        )
+        components.append(
+            {
+                "id": "multi-apply",
+                "component": "Button",
+                "child": "multi-apply-text",
+                "action": {
+                    "event": {
+                        "name": apply_action["type"],
+                        "context": _action_context(apply_action),
+                    }
+                },
+            }
+        )
+    data: dict[str, Any] = {
+        "question": props["question"],
+        "selections": {option: False for option in options},
+    }
+    return components, data
 
 
 # ---------------------------------------------------------------------------

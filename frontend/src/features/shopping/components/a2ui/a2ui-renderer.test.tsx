@@ -51,6 +51,7 @@ describe("A2uiRenderer", () => {
     for (const name of [
       "cart-one-item.json",
       "comparison-two.json",
+      "multi-picker-priorities.json",
       "preference-picker-category.json",
       "product-details.json",
     ]) {

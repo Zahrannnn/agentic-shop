@@ -127,12 +127,13 @@ Component registry — `root.type` is exactly one of:
 
 | Type | Props | Bounds | Allowed actions | Render as |
 |---|---|---|---|---|
-| `product_grid` | `title`, `productIds[]`, `ranked` | 1–6 ids | `compare`, `details`, `add_to_cart` | ranked card grid; buttons per card |
+| `product_grid` | `title`, `productIds[]`, `ranked`, `refinement?` (D11) | 1–6 ids | `compare`, `details`, `add_to_cart`, `refine` (≤8, D11) | ranked card grid; buttons per card; refinement bar chips when `refinement` is present |
 | `preference_picker` | `question`, `options[]` | 2–4 options, each has a matching `select_preference` action | `select_preference` | question + chip buttons |
 | `comparison_table` | `productIds[]`, `attributes[]` | 2–3 ids | `choose` (≤1) | side-by-side table; single "Choose X" CTA |
 | `product_details` | `productId`, `showQuotes` | — | none | detail card; quotes when flagged |
-| `cart_view` | `items[]` (`productId`,`quantity`), `totalUsd` | — | `remove_from_cart` | cart summary + remove buttons |
+| `cart_view` | `items[]` (`productId`,`quantity`), `totalUsd` | — | `remove_from_cart`, `set_quantity` (D11, steps clamped 1–10) | cart summary + −/+ steppers + remove buttons |
 | `text_block` | `body`, `heading?` | — | none | plain disclosure/notice panel |
+| `multi_picker` (D11) | `question`, `options[]`, `maxSelect` | 2–6 options, 1–3 max | `select_preferences` (exactly one) | checkbox rows + one apply button |
 
 **Action wiring — the interactive loop.** Every action has `type`, `label`,
 `payload`. When the user clicks one, POST `/api/chat` with the same `session_id`,
