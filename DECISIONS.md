@@ -150,6 +150,23 @@ one transcript conversation.
     they skip the LLM.
 - **Deferred Jev targets:** clarify-gate decisions (would amend D4),
   follow-up semantic disambiguation, retry-guardrail judgments.
+- **D10 — A2UI additive projection.** Every emitted UI plan is additionally
+  transpiled — by pure, deterministic code (`app/a2ui/transpile.py`) — into an
+  A2UI v0.9 message stream (github.com/a2ui-project/a2ui; wire version pinned
+  by one constant, v1.0 is a breaking RC we do not chase) and streamed as one
+  optional `a2ui_update` SSE frame right after `ui_update`. Rules:
+  - The frozen DSL contract (D2/D7, `ui_update`) stays the single source of
+    truth; the projection is never a second contract. Golden fixtures under
+    `backend/fixtures/a2ui/` pin the projection byte-for-byte.
+  - Best-effort by contract: a projection failure skips the `a2ui_update`
+    frame and NEVER fails a valid turn; clients must ignore the event exactly
+    like any unknown event when they have not opted in (the frozen frontend
+    tolerance rule).
+  - Lossless actions: every plan action survives as a Button event whose
+    resolved context reconstructs the verbatim `UIAction` (per-card actions
+    bind `productId` to the row item's `id`, mirroring the native stamping).
+  - One surface per turn (`surfaceId = sessionId-turnId`); the bounded cart
+    amendment (D2 amendment) projects to `deleteSurface` + recreate.
 
 ## Amendments (2026-08-30 — owner-directed Phase 2 polish)
 

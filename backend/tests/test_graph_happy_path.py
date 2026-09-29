@@ -215,7 +215,9 @@ async def test_us2_category_less_request_asks_exactly_once() -> None:
     assert plan.root.props.question == ASK_QUESTION
 
     assert state["asked_clarification"] is True
-    assert kinds[-1] == "ui_update"  # routes adds the turn_end terminator
+    # The additive A2UI projection (D10) follows the plan payload; routes
+    # adds the turn_end terminator after it.
+    assert kinds[-2:] == ["ui_update", "a2ui_update"]
 
 
 async def test_us2_answer_completes_without_second_question() -> None:

@@ -1,0 +1,179 @@
+[
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "spec-fixture-1",
+      "catalogId": "https://agentic-shop.local/a2ui/catalogs/shopping/v1.json"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "spec-fixture-1",
+      "components": [
+        {
+          "id": "root",
+          "component": "Card",
+          "child": "body"
+        },
+        {
+          "id": "body",
+          "component": "Column",
+          "children": [
+            "grid-title",
+            "grid-caption",
+            "product-list",
+            "grid-action-0"
+          ]
+        },
+        {
+          "id": "grid-title",
+          "component": "Text",
+          "text": {
+            "path": "/title"
+          },
+          "variant": "h3"
+        },
+        {
+          "id": "grid-caption",
+          "component": "Text",
+          "text": {
+            "path": "/caption"
+          },
+          "variant": "caption"
+        },
+        {
+          "id": "product-list",
+          "component": "List",
+          "children": {
+            "componentId": "product-row",
+            "path": "/products"
+          }
+        },
+        {
+          "id": "product-row",
+          "component": "Row",
+          "children": [
+            "product-name",
+            "product-price",
+            "product-anc",
+            "card-action-0",
+            "card-action-1"
+          ]
+        },
+        {
+          "id": "product-name",
+          "component": "Text",
+          "text": {
+            "path": "name"
+          }
+        },
+        {
+          "id": "product-price",
+          "component": "Text",
+          "text": {
+            "path": "priceUsd"
+          }
+        },
+        {
+          "id": "product-anc",
+          "component": "Text",
+          "text": {
+            "path": "ancType"
+          },
+          "variant": "caption"
+        },
+        {
+          "id": "card-action-text-0",
+          "component": "Text",
+          "text": "Details"
+        },
+        {
+          "id": "card-action-0",
+          "component": "Button",
+          "child": "card-action-text-0",
+          "action": {
+            "event": {
+              "name": "details",
+              "context": {
+                "productId": {
+                  "path": "id"
+                },
+                "label": "Details"
+              }
+            }
+          }
+        },
+        {
+          "id": "card-action-text-1",
+          "component": "Text",
+          "text": "Add to cart"
+        },
+        {
+          "id": "card-action-1",
+          "component": "Button",
+          "child": "card-action-text-1",
+          "action": {
+            "event": {
+              "name": "add_to_cart",
+              "context": {
+                "productId": {
+                  "path": "id"
+                },
+                "label": "Add to cart"
+              }
+            }
+          }
+        },
+        {
+          "id": "grid-action-text-0",
+          "component": "Text",
+          "text": "Compare"
+        },
+        {
+          "id": "grid-action-0",
+          "component": "Button",
+          "child": "grid-action-text-0",
+          "action": {
+            "event": {
+              "name": "compare",
+              "context": {
+                "label": "Compare"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateDataModel": {
+      "surfaceId": "spec-fixture-1",
+      "value": {
+        "title": "Best matches for long flights",
+        "caption": "Ranked in recommendation order",
+        "products": [
+          {
+            "id": "aurora-hush-pro",
+            "name": "Aurora Hush Pro",
+            "priceUsd": 179.0,
+            "ancType": "adaptive"
+          },
+          {
+            "id": "cloudline-air",
+            "name": "Cloudline Air",
+            "priceUsd": 139.0,
+            "ancType": "active"
+          },
+          {
+            "id": "maple-ridge-comfort-150",
+            "name": "Maple Ridge Comfort 150",
+            "priceUsd": 149.0,
+            "ancType": "active"
+          }
+        ]
+      }
+    }
+  }
+]

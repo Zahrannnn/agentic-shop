@@ -87,11 +87,13 @@ data: <one-line JSON>\n
 | 1 | `status` | `{"stage":"…"}`, `count` only on `found_n` | stages strictly in order: `intent_parsed → searching → found_n → researching → ranking → building_ui`. Clarification turns stop after `intent_parsed`. |
 | 2 | `message_delta` | `{"text":"…"}` | append, in order, to the answer bubble |
 | 3 | `ui_update` | the **plan document** itself (§5) | arrives once, after all deltas; full replace |
+| 3a | `a2ui_update` | `{"messages":[…A2UI v0.9 message stream…]}` | **optional, ignorable** (D10): the additive A2UI projection of the same plan, right after `ui_update`. May be absent on any turn (best-effort projection); render from it only if you opt in, otherwise ignore it like any unknown event. |
 | 4 | `turn_end` | `{}` | success terminator; **unlocks input** |
-| 4' | `error` | `{"message":"…","code":"structured_output"\|"internal"}` | failure terminator; **replaces** `turn_end`, nothing follows |
+| 4' | `error` | `{"message":"…","code":"structured_output"\|"jev"\|"internal"}` | failure terminator; **replaces** `turn_end`, nothing follows |
 
 **Guarantees you can rely on:** statuses are gapless and ordered; ≤ 1 `ui_update` per
-turn; exactly one terminal frame (`turn_end` XOR `error`); no frames after the
+turn; ≤ 1 `a2ui_update` per turn, only ever between `ui_update` and `turn_end`;
+exactly one terminal frame (`turn_end` XOR `error`); no frames after the
 terminal frame.
 
 **Client state machine:**

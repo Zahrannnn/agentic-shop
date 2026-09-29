@@ -161,7 +161,9 @@ async def test_ask_turn_streams_question_and_picker_then_ends() -> None:
     question = "".join(data["text"] for kind, data in events if kind == "message_delta")
     assert ASK_QUESTION in question
     assert kinds.count("ui_update") == 1
-    assert kinds[-1] == "ui_update"  # routes appends turn_end after the stream
+    # The additive A2UI projection (D10) follows the plan payload; routes
+    # appends turn_end after the stream.
+    assert kinds[-2:] == ["ui_update", "a2ui_update"]
 
     plan_dict = next(data for kind, data in events if kind == "ui_update")
     plan = UIPlan.model_validate(plan_dict)

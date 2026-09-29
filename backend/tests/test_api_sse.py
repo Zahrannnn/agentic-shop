@@ -277,7 +277,7 @@ async def test_sse_frames_are_well_formed(client) -> None:
     for frame in frames:
         lines = frame.split("\n")
         assert len(lines) == 2, frame
-        assert re.fullmatch(r"event: [a-z_]+", lines[0]) is not None, frame
+        assert re.fullmatch(r"event: [a-z0-9_]+", lines[0]) is not None, frame
         assert lines[1].startswith("data: ")
         json.loads(lines[1][len("data: ") :])  # every data line is single-line JSON
 
