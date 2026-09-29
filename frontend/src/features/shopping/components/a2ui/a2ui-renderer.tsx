@@ -6,7 +6,7 @@ import {
   basicCatalog,
   type ReactComponentImplementation,
 } from "@a2ui/react/v0_9";
-import { Catalog, MessageProcessor } from "@a2ui/web_core/v0_9";
+import { Catalog, MessageProcessor, peekValue, type DataModel } from "@a2ui/web_core/v0_9";
 
 import {
   PLAN_ACTION_TYPES,
@@ -32,6 +32,11 @@ import {
  * (`name = action.type`, `context = {**payload, "label"}`), so the listener
  * reconstructs the verbatim `PlanAction` and hands it to the SAME `onAction`
  * path the native renderer uses — both renderers send identical wire traffic.
+ * The ONE exception is the multi-picker's `select_preferences` template (D11
+ * stamping, the `withProduct` precedent): its CheckBoxes two-way-bind into
+ * the surface data model, so an unstamped tap reads `/selections` and fills
+ * `values` with the checked options — mirroring the native renderer's local
+ * checkbox state.
  *
  * The processor is rebuilt only when the messages or handler change and is
  * disposed on cleanup; a processing failure (gate drift, not expected for
@@ -42,6 +47,17 @@ export type A2uiRendererProps = {
   messages: A2uiMessage[];
   onAction: (action: PlanAction) => void;
 };
+
+/** The checked option names from the surface's `/selections` map (D11). */
+function checkedSelections(dataModel: DataModel): string[] {
+  const selections: unknown = peekValue(dataModel.getSignal("/selections"));
+  if (typeof selections !== "object" || selections === null) {
+    return [];
+  }
+  return Object.entries(selections as Record<string, unknown>)
+    .filter(([, checked]) => checked === true)
+    .map(([option]) => option);
+}
 
 export function A2uiRenderer({ messages, onAction }: A2uiRendererProps) {
   const { processor, surfaceId, error } = useMemo(() => {
@@ -54,6 +70,9 @@ export function A2uiRenderer({ messages, onAction }: A2uiRendererProps) {
       [...basicCatalog.components.values()],
       [...basicCatalog.functions.values()],
     );
+    // Surfaces do not exist until the messages are processed, but the action
+    // handler is constructed first — the closure reads through this holder.
+    let activeDataModel: DataModel | null = null;
     const instance = new MessageProcessor<ReactComponentImplementation>(
       [shoppingCatalog],
       (action) => {
@@ -64,10 +83,20 @@ export function A2uiRenderer({ messages, onAction }: A2uiRendererProps) {
         if (!(PLAN_ACTION_TYPES as readonly string[]).includes(action.name)) {
           return;
         }
+        let finalPayload = payload;
+        if (
+          action.name === "select_preferences" &&
+          activeDataModel !== null &&
+          (!Array.isArray(payload.values) || payload.values.length === 0)
+        ) {
+          // D11 stamping exception: the checkboxes wrote the user's picks
+          // into the data model; stamp them before the action goes out.
+          finalPayload = { ...payload, values: checkedSelections(activeDataModel) };
+        }
         onAction({
           type: action.name as PlanAction["type"],
           label: typeof label === "string" ? label : action.name,
-          payload,
+          payload: finalPayload,
         });
       },
     );
@@ -77,9 +106,13 @@ export function A2uiRenderer({ messages, onAction }: A2uiRendererProps) {
       instance.dispose();
       return { processor: null, surfaceId: null, error: processingError };
     }
+    const created = blueprintSurfaceId({ messages });
+    if (created !== null) {
+      activeDataModel = instance.model.getSurface(created)?.dataModel ?? null;
+    }
     return {
       processor: instance,
-      surfaceId: blueprintSurfaceId({ messages }),
+      surfaceId: created,
       error: null,
     };
   }, [messages, onAction]);
