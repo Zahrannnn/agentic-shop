@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { RootState } from "@/shared/store/store";
 import {
   STAGE_ORDER,
+  blueprintAmended,
+  blueprintReceived,
   deltaAppended,
   phaseSetIdle,
   planAmended,
@@ -36,6 +38,7 @@ function withTurn(overrides: Partial<Turn> = {}): TranscriptState {
     deltas: "",
     plan: null,
     planState: "none",
+    blueprint: null,
     terminal: null,
     ...overrides,
   };
@@ -267,6 +270,7 @@ describe("planAmended (D2 amendment: bounded cart plan patching)", () => {
           deltas: "Here is my pick.",
           plan: CART_PLAN_TURN_1,
           planState: "rendered",
+          blueprint: null,
           terminal: { kind: "turn_end" },
         },
         {
@@ -279,6 +283,7 @@ describe("planAmended (D2 amendment: bounded cart plan patching)", () => {
           },
           stages: [],
           deltas: "Added to your cart.",
+          blueprint: null,
           plan: null,
           planState: "none",
           terminal: null,
@@ -351,6 +356,7 @@ describe("selectors and helpers", () => {
     deltas: "prose",
     plan: { planVersion: "1" },
     planState: "rendered",
+    blueprint: null,
     terminal: null,
   };
 
@@ -381,5 +387,71 @@ describe("selectors and helpers", () => {
 
   it("turnProse returns the accumulated prose", () => {
     expect(turnProse(turn)).toBe("prose");
+  });
+});
+
+describe("blueprint reducers (D10 additive A2UI projection)", () => {
+  const MESSAGES = [{ version: "v0.9", deleteSurface: { surfaceId: "s-1" } }];
+
+  it("blueprintReceived stores the message list on the current turn", () => {
+    const state = transcriptReducer(withTurn(), blueprintReceived(MESSAGES));
+    expect(currentTurn(state).blueprint).toEqual(MESSAGES);
+  });
+
+  it("blueprintReceived is a no-op after the terminal frame", () => {
+    const state = transcriptReducer(
+      withTurn({ terminal: { kind: "turn_end" } }),
+      blueprintReceived(MESSAGES),
+    );
+    expect(currentTurn(state).blueprint).toBeNull();
+  });
+
+  function withCartTranscript(): TranscriptState {
+    return {
+      phase: "streaming",
+      turns: [
+        {
+          id: 1,
+          userText: "cart",
+          sentAction: null,
+          stages: [],
+          deltas: "",
+          plan: { planVersion: "1", sessionId: "sess-1", turnId: 1 },
+          planState: "rendered",
+          blueprint: [
+            { version: "v0.9", createSurface: { surfaceId: "sess-1-1", catalogId: "x" } },
+          ],
+          terminal: { kind: "turn_end" },
+        },
+        {
+          id: 2,
+          userText: "add the first one",
+          sentAction: null,
+          stages: [],
+          deltas: "",
+          plan: null,
+          planState: "none",
+          blueprint: null,
+          terminal: null,
+        },
+      ],
+    };
+  }
+
+  it("blueprintAmended replaces the anchored turn's blueprint in place", () => {
+    const state = transcriptReducer(
+      withCartTranscript(),
+      blueprintAmended({ amendsTurnId: 1, messages: MESSAGES }),
+    );
+    expect(state.turns[0].blueprint).toEqual(MESSAGES);
+    expect(state.turns[1].blueprint).toBeNull();
+  });
+
+  it("blueprintAmended clears the anchor when no projection arrived", () => {
+    const state = transcriptReducer(
+      withCartTranscript(),
+      blueprintAmended({ amendsTurnId: 1, messages: null }),
+    );
+    expect(state.turns[0].blueprint).toBeNull();
   });
 });

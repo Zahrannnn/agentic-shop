@@ -91,6 +91,7 @@ function makeTurn(overrides: Partial<Turn>): Turn {
     deltas: "",
     plan: null,
     planState: "none",
+    blueprint: null,
     terminal: null,
     ...overrides,
   };

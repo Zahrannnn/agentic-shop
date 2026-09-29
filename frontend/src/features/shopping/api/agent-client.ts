@@ -44,6 +44,13 @@ export type TurnHandlers = {
   onDelta: (text: string) => void;
   /** `ui_update` frame: the full plan envelope, passed through verbatim. */
   onPlan: (plan: unknown) => void;
+  /**
+   * Optional `a2ui_update` frame (D10): `{"messages": [...]}` — the additive
+   * A2UI projection of the plan that `onPlan` just received. Optional so
+   * every pre-existing handler object keeps compiling; when absent the
+   * frame is ignored exactly like an unknown event.
+   */
+  onA2ui?: (payload: unknown) => void;
   /** `turn_end` terminator: success; nothing follows. */
   onTurnEnd: () => void;
   /** `error` terminator (or an unparsable data line): display-safe message. */
@@ -125,6 +132,11 @@ function dispatchFrame(frame: SseFrame, handlers: TurnHandlers): boolean {
     case "ui_update":
       // The data IS the plan envelope — no unwrapping here.
       handlers.onPlan(data);
+      break;
+    case "a2ui_update":
+      // Optional projection (D10): callers that opted in render from it;
+      // everyone else ignores it like any unknown event.
+      handlers.onA2ui?.(data);
       break;
     case "turn_end":
       handlers.onTurnEnd();

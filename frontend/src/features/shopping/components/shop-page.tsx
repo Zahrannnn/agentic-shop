@@ -87,6 +87,9 @@ export function ShopPage() {
   const { turns, phase, isBusy, sessionId, send, startFresh } = useAgentTurn();
   const [expiredNotice, setExpiredNotice] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
+  // D10 side-by-side: which stack renders plan regions. Ephemeral UI state by
+  // frontend/AGENTS.md (RTK is for durable state) — default native.
+  const [rendererKind, setRendererKind] = useState<"native" | "a2ui">("native");
   const resumeRef = useRef(hasRehydratedSession());
   // The session id is random per process/store, so server and client renders
   // would disagree during hydration (React #418). Render it only after mount;
@@ -172,6 +175,17 @@ export function ShopPage() {
             <Button
               variant="outline"
               size="sm"
+              data-testid="renderer-toggle"
+              aria-pressed={rendererKind === "a2ui"}
+              onClick={() =>
+                setRendererKind((kind) => (kind === "native" ? "a2ui" : "native"))
+              }
+            >
+              Renderer: {rendererKind === "native" ? "Native" : "A2UI"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               data-testid="browse-catalog"
               onClick={() => setCatalogOpen(true)}
             >
@@ -217,6 +231,7 @@ export function ShopPage() {
                     isLatest={index === turns.length - 1}
                     isStreaming={streaming && index === turns.length - 1}
                     onAction={handleAction}
+                    rendererKind={rendererKind}
                   />
                 </li>
               ))}

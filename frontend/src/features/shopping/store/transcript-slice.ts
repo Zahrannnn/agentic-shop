@@ -36,7 +36,9 @@ export type TranscriptPhase = "idle" | "streaming";
 /**
  * One conversation turn. `plan` stays the raw plan dict — validation happens
  * in the Zod gate (`validations/`), and only validated plans reach
- * `planReceived` (`planState: "rendered"`).
+ * `planReceived` (`planState: "rendered"`). `blueprint` is the OPTIONAL A2UI
+ * projection of the same plan (D10): present only when an `a2ui_update` frame
+ * arrived AND passed its own gate; the native plan renders regardless.
  */
 export type Turn = {
   /** Monotonic per conversation; equal to the backend turnId-to-be. */
@@ -50,6 +52,8 @@ export type Turn = {
   deltas: string;
   plan: unknown;
   planState: PlanState;
+  /** Validated A2UI message stream for this turn's surface (D10), if any. */
+  blueprint: unknown[] | null;
   terminal: TerminalOutcome | null;
 };
 
@@ -97,6 +101,7 @@ export const transcriptSlice = createSlice({
         deltas: "",
         plan: null,
         planState: "none",
+        blueprint: null,
         terminal: null,
       };
       state.turns.push(turn);
@@ -199,6 +204,42 @@ export const transcriptSlice = createSlice({
         code: "structured_output",
       };
     },
+    /**
+     * Store a validated A2UI projection (D10) on the current turn. Purely
+     * additive: a missing or invalid projection stores nothing — the native
+     * plan is unaffected and never fails the turn.
+     */
+    blueprintReceived: (state, action: PayloadAction<unknown[]>) => {
+      const turn = currentTurn(state);
+      if (!turn || turn.terminal !== null) {
+        return;
+      }
+      turn.blueprint = action.payload;
+    },
+    /**
+     * Blueprint half of the bounded amendment (D2 amendment): the amending
+     * turn's projection replaces the referenced turn's blueprint IN PLACE —
+     * or clears it when no projection arrived, mirroring `planAmended`'s
+     * anchor lookup by the stored plan's `turnId`.
+     */
+    blueprintAmended: (
+      state,
+      action: PayloadAction<{ amendsTurnId: number; messages: unknown[] | null }>,
+    ) => {
+      const current = currentTurn(state);
+      if (!current || current.terminal !== null) {
+        return;
+      }
+      const { amendsTurnId, messages } = action.payload;
+      const anchor = state.turns.find(
+        (turn) =>
+          (turn.plan as { turnId?: number } | null | undefined)?.turnId ===
+          amendsTurnId,
+      );
+      if (anchor) {
+        anchor.blueprint = messages;
+      }
+    },
     /** `turn_end` terminator: unlock the input (phase → "idle"). */
     turnEnded: (state) => {
       const turn = currentTurn(state);
@@ -245,6 +286,8 @@ export const {
   deltaAppended,
   planReceived,
   planAmended,
+  blueprintReceived,
+  blueprintAmended,
   planInvalid,
   turnEnded,
   turnFailed,

@@ -235,6 +235,61 @@ describe("startAgentTurn — happy stream", () => {
     ]);
   });
 
+  it("dispatches a2ui_update to the optional handler between plan and terminal", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        sseResponse([
+          frame("message_delta", { text: "hi" }),
+          frame("ui_update", UI_PLAN),
+          frame("a2ui_update", { messages: [{ version: "v0.9" }] }),
+          frame("turn_end", {}),
+        ]).response,
+      ),
+    );
+    const { events, handlers } = createHandlers();
+    const order: string[] = [];
+    const recordPlan = handlers.onPlan;
+    handlers.onPlan = (plan) => {
+      recordPlan(plan);
+      order.push("plan");
+    };
+    handlers.onA2ui = (payload) => {
+      order.push("a2ui");
+      expect(payload).toEqual({ messages: [{ version: "v0.9" }] });
+    };
+
+    await startAgentTurn(BASE_URL, BODY, handlers);
+
+    expect(order).toEqual(["plan", "a2ui"]);
+    expect(events).toEqual([
+      { kind: "delta", text: "hi" },
+      { kind: "plan", plan: UI_PLAN },
+      { kind: "turn_end" },
+    ]);
+  });
+
+  it("skips a2ui_update when no handler opted in", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        sseResponse([
+          frame("ui_update", UI_PLAN),
+          frame("a2ui_update", { messages: [] }),
+          frame("turn_end", {}),
+        ]).response,
+      ),
+    );
+    const { events, handlers } = createHandlers();
+
+    await startAgentTurn(BASE_URL, BODY, handlers);
+
+    expect(events).toEqual([
+      { kind: "plan", plan: UI_PLAN },
+      { kind: "turn_end" },
+    ]);
+  });
+
   it("flushes a trailing frame the connection cut before its terminator", async () => {
     vi.stubGlobal(
       "fetch",

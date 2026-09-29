@@ -52,19 +52,23 @@ within each story; golden fixtures are the contract for PR 2/PR 3.
 - [x] A05 Docs: DECISIONS.md D10, http-api.md optional-event note,
       FRONTEND_GUIDE.md §4 note; goldens committed.
 
-## PR 3 — A2UI rendering path (frontend)
+## PR 3 — A2UI rendering path (frontend) — COMPLETE
 
-- [ ] F01 Optional `onA2ui` handler + `case "a2ui_update"` in
-      `frontend/src/features/shopping/api/agent-client.ts` (+ order test;
-      unknown-event tolerance test stays green).
-- [ ] F02 Sibling blueprint schema `validations/a2ui-schema.ts` (pinned
+- [x] F01 Optional `onA2ui` handler + `case "a2ui_update"` in
+      `frontend/src/features/shopping/api/agent-client.ts` (+ order and
+      opt-out tests; unknown-event tolerance test stays green).
+- [x] F02 Sibling blueprint schema `validations/a2ui-schema.ts` (pinned
       catalog id + `v0.9` message subset) + golden-fixture acceptance and
-      rejection tests; `uiPlanSchema` untouched.
-- [ ] F03 Store: additive `Turn.blueprint` + `blueprintReceived` reducer
-      (no-op after terminal) in `store/transcript-slice.ts`.
-- [ ] F04 Renderer: `components/a2ui/` consuming the message stream
-      (`@a2ui/react` primary; documented fallback = minimal in-repo processor
-      over the six styled components); action events → verbatim `UIAction`;
-      `data-testid="a2ui-*"`.
-- [ ] F05 Toggle in `shop-page.tsx` header (ephemeral state; native fallback
-      with notice when a turn has no blueprint) + tests; `npm run verify`.
+      rejection tests; `uiPlanSchema` untouched (only `PLAN_ACTION_TYPES`
+      gained an export).
+- [x] F03 Store: additive `Turn.blueprint` + `blueprintReceived`/
+      `blueprintAmended` reducers (no-op after terminal) in
+      `store/transcript-slice.ts`.
+- [x] F04 Renderer: `components/a2ui/a2ui-renderer.tsx` on the OFFICIAL
+      `@a2ui/react` + `@a2ui/web_core` (v0.9) — the zod-v4 peer risk was
+      resolved empirically (all five goldens process; the fallback processor
+      was not needed); actions reconstruct the verbatim `UIAction` (proven
+      by a click test through the real renderer); `data-testid="a2ui-*"`.
+- [x] F05 Toggle in `shop-page.tsx` header (ephemeral state; native fallback
+      with notice when a turn has no blueprint); `npm run verify` green
+      (189 tests).
