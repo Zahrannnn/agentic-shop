@@ -59,9 +59,12 @@ from app.dsl.models import (
     ComparisonTableProps,
     ComponentNode,
     GridProduct,
+    MultiPickerProps,
     PreferencePickerProps,
     ProductDetailsProps,
     ProductGridProps,
+    RefinementFilters,
+    RefinementState,
     TextBlockProps,
     UIAction,
     UIPlan,
@@ -82,7 +85,7 @@ from app.graph.state import ShoppingState
 from app.llm.client import CONTEXT_CLOSE, CONTEXT_OPEN, call_structured, get_llm
 from app.llm.jev import jev_ask_intent
 from app.ranking.scorer import SCORABLE_ATTRIBUTES, ScoredProduct, score_products
-from app.tools.cart import add_to_cart, get_cart, remove_from_cart
+from app.tools.cart import MAX_QUANTITY, add_to_cart, get_cart, remove_from_cart, set_quantity
 from app.tools.research import summarize_candidates
 from app.tools.search import SearchFilters, relax_filters, search_products
 
@@ -429,6 +432,69 @@ def _chip_category(action: Any) -> str | None:
     return cleaned
 
 
+#: Refinement chips carry flat payloads (D11); these are the intent keys the
+#: fast-path merges them into.
+_REFINE_SORTS: frozenset[str] = frozenset({"relevance", "price_asc", "price_desc", "rating"})
+
+
+def _refine_params(action: Any) -> dict[str, Any] | None:
+    """Return the refinement TARGET a ``refine`` chip selects, if any (D11).
+
+    Second chip fast-path (the category chip pattern): a valid ``refine``
+    action IS the refinement intent — the LLM intent call is skipped. The
+    payload is the chip's complete target state (flat vocabulary); absent
+    keys mean "reset that dimension", which is what makes the Clear chip
+    truthful. Unknown/malformed keys return ``None`` and the normal text
+    path runs (validation already keeps those off the wire).
+    """
+    if not isinstance(action, dict) or action.get("type") != "refine":
+        return None
+    payload = action.get("payload") or {}
+    updates: dict[str, Any] = {}
+    sort = payload.get("sort")
+    if sort is not None:
+        if sort not in _REFINE_SORTS:
+            return None
+        updates["sort"] = sort
+    anc_only = payload.get("ancOnly")
+    if anc_only is not None:
+        if not isinstance(anc_only, bool):
+            return None
+        updates["anc_only"] = anc_only
+    for payload_key, intent_key in (
+        ("minBatteryHours", "min_battery_hours"),
+        ("maxPriceUsd", "refine_max_price"),
+    ):
+        value = payload.get(payload_key)
+        if value is not None:
+            level = _coerce_float(value)
+            if level is None or level <= 0:
+                return None
+            updates[intent_key] = level
+    return updates
+
+
+def _select_preferences_priorities(action: Any) -> dict[str, float] | None:
+    """Return the priorities a ``select_preferences`` answer selects (D11).
+
+    Third chip fast-path: the multi-picker's stamped ``values`` list maps onto
+    canonical priorities at salience 1.0 — the same merge semantics the LLM
+    path's ``_merge_intent`` applies. Unknown option names are ignored (the
+    renderer only ships checked options; validation bounds them anyway).
+    """
+    if not isinstance(action, dict) or action.get("type") != "select_preferences":
+        return None
+    values = (action.get("payload") or {}).get("values")
+    if not isinstance(values, list) or not values:
+        return None
+    priorities: dict[str, float] = {}
+    for value in values:
+        key = _canonical_priority(value)
+        if key is not None:
+            priorities[key] = 1.0
+    return priorities or None
+
+
 def _jev_intent_extraction(text: str) -> IntentExtraction:
     """One batched Jev judgment mapped onto ``IntentExtraction`` (D9).
 
@@ -453,7 +519,9 @@ def intent_node(state: ShoppingState) -> dict[str, Any]:
 
     * chip answer (``select_preference`` with a category value) — the category
       is merged deterministically and the LLM intent call is skipped (see
-      :func:`_chip_category`);
+      :func:`_chip_category`); the D11 chip fast-paths
+      (:func:`_refine_params`, :func:`_select_preferences_priorities`) work
+      the same way for refinement chips and the multi-picker answer;
     * US4 follow-up (:func:`resolve_followup` matched a ui_action or a
       positional/demonstrative phrase) — the turn is fully determined by
       session state, so the LLM intent call is skipped here too, keeping
@@ -472,10 +540,31 @@ def intent_node(state: ShoppingState) -> dict[str, Any]:
     text = state.get("pending_user_text", "")
     action = state.get("pending_ui_action")
     chip_category = _chip_category(action)
-    followup = None if chip_category is not None else resolve_followup(state)
+    refine_updates = _refine_params(action)
+    preference_priorities = _select_preferences_priorities(action)
+    followup = (
+        None
+        if chip_category is not None or refine_updates is not None or preference_priorities
+        else resolve_followup(state)
+    )
     if chip_category is not None:
         intent = _merge_intent(state.get("intent", {}), IntentExtraction())
         intent["category"] = chip_category
+    elif refine_updates is not None:
+        # D11 refinement chip: the payload is the chip's complete target
+        # state, so the refinement dimension is REPLACED (absent keys reset —
+        # that is what makes the Clear chip truthful). Free-text constraints
+        # re-parse from the raw text on every later turn that mentions them.
+        intent = _merge_intent(state.get("intent", {}), IntentExtraction())
+        intent["sort"] = refine_updates.get("sort", "relevance")
+        intent["anc_only"] = refine_updates.get("anc_only")
+        intent["min_battery_hours"] = refine_updates.get("min_battery_hours")
+        intent["refine_max_price"] = refine_updates.get("refine_max_price")
+    elif preference_priorities is not None:
+        # D11 multi-picker answer: the checked options ARE the priorities.
+        intent = _merge_intent(state.get("intent", {}), IntentExtraction())
+        for key, salience in preference_priorities.items():
+            intent["priorities"][key] = max(intent["priorities"].get(key, 0.0), salience)
     elif followup is not None:
         intent = _merge_intent(state.get("intent", {}), IntentExtraction())
     else:
@@ -536,7 +625,11 @@ def clarify_decision(state: ShoppingState) -> str:
        row; after any answer the pipeline always runs to completion);
     3. ``intent.category`` is missing or not a known catalog category →
        ``"ask"``;
-    4. Otherwise → ``"proceed"``.
+    4. the D11 priorities ask: the category is known but NO attribute
+       priorities were stated and this turn is not a follow-up →
+       ``"ask_priorities"`` (the multi_picker "what matters most?" — fires
+       at most once per conversation, guarded by rule 2);
+    5. Otherwise → ``"proceed"``.
 
     Pure: reads only the state dict plus the catalog category set. Missing
     budget or contradictory constraints never ask (R7: don't ask about
@@ -554,6 +647,15 @@ def clarify_decision(state: ShoppingState) -> str:
         return "ask"
     if category.strip().lower() not in _known_categories():
         return "ask"
+    if isinstance(followup, dict):
+        return "proceed"
+    priorities = (state.get("intent") or {}).get("priorities") or {}
+    has_priorities = any(
+        (level := _coerce_float(salience)) is not None and level > 0.0
+        for salience in priorities.values()
+    )
+    if not has_priorities:
+        return "ask_priorities"
     return "proceed"
 
 
@@ -603,6 +705,59 @@ def ui_agent_ask(state: ShoppingState) -> dict[str, Any]:
                 actions=[
                     UIAction(type="select_preference", label=label, payload={"value": value})
                     for label, value in options
+                ],
+            ),
+        )
+        validate_plan(plan, {product.id for product in get_catalog()})
+    except (PlanValidationError, ValidationError):
+        _emit(("error", dict(_PLAN_ERROR_PAYLOAD)))
+        return {"error": dict(_PLAN_ERROR_PAYLOAD)}
+    serialized = serialize_plan(plan)
+    _emit(("ui_update", serialized))
+    _emit_a2ui_projection(serialized)
+    messages = [*state.get("messages", []), {"role": "assistant", "content": spoken}]
+    return {
+        "plan": serialized,
+        "turn_id": plan.turn_id,
+        "asked_clarification": True,
+        "messages": messages,
+    }
+
+
+def ui_agent_ask_priorities(state: ShoppingState) -> dict[str, Any]:
+    """D11 priorities ask (D4 amendment): the multi_picker "what matters
+    most?" turn, built and emitted exactly like the category ask.
+
+    Fires at most once per conversation (the ``asked_clarification`` guard in
+    the router), and only when the category is already known but no
+    attribute priorities were stated. The single ``select_preferences``
+    action carries the empty ``values`` template the client stamps. Same
+    fail-clean contract as every ask node: an invalid plan ends the turn
+    with one ``error`` frame instead.
+    """
+    spoken = (
+        f"{ASK_PRIORITIES_QUESTION} I'll rank what fits your picks first — "
+        "anything else still factors in."
+    )
+    _emit(("message_delta", {"text": spoken}))
+    try:
+        plan = UIPlan(
+            plan_version="1",
+            session_id=state.get("session_id") or "",
+            turn_id=state.get("turn_id", 0) + 1,
+            root=ComponentNode(
+                type="multi_picker",
+                props=MultiPickerProps(
+                    question=ASK_PRIORITIES_QUESTION,
+                    options=list(PRIORITY_OPTIONS),
+                    max_select=2,
+                ),
+                actions=[
+                    UIAction(
+                        type="select_preferences",
+                        label="Show my picks",
+                        payload={"values": []},
+                    )
                 ],
             ),
         )
@@ -697,10 +852,15 @@ def search_node(state: ShoppingState) -> dict[str, Any]:
 
     min_battery_hours = _coerce_float(intent.get("min_battery_hours"))
     codecs = tuple(str(codec).lower() for codec in (intent.get("codecs") or []))
+    # D11 refinement chips: an explicit price cap tightens (never loosens) the
+    # budget; the ANC-only chip maps onto the existing require_anc predicate.
+    refine_max_price = _coerce_float(intent.get("refine_max_price"))
+    max_price = min(price for price in (budget, refine_max_price) if price is not None)
     filters = SearchFilters(
         category=category_key,
-        max_price=budget,
+        max_price=max_price,
         min_battery_hours=min_battery_hours,
+        require_anc=bool(intent.get("anc_only")),
         codecs=codecs,
     )
     matches = search_products(catalog, filters)
@@ -805,10 +965,37 @@ def _fallback_weights(priorities: dict[str, Any]) -> dict[str, float]:
     return weights
 
 
+def _apply_sort(
+    ranked: list[ScoredProduct], sort: Any, by_id: dict[str, Product]
+) -> list[ScoredProduct]:
+    """Pure post-scoring re-order (D11). ``relevance`` (the scorer's order, or
+    anything unrecognized) is returned unchanged; the other sorts key on the
+    catalog product with a product-id tiebreak so identical inputs always
+    produce identical order (constitution III)."""
+    if sort == "price_asc":
+        return sorted(ranked, key=lambda s: (by_id[s.product_id].price_usd, s.product_id))
+    if sort == "price_desc":
+        return sorted(ranked, key=lambda s: (-by_id[s.product_id].price_usd, s.product_id))
+    if sort == "rating":
+
+        def rating_key(scored: ScoredProduct) -> tuple[float, str]:
+            scores = by_id[scored.product_id].review_scores.model_dump()
+            return (-sum(scores.values()) / len(scores), scored.product_id)
+
+        return sorted(ranked, key=rating_key)
+    return ranked
+
+
 def recommend_node(state: ShoppingState) -> dict[str, Any]:
-    """Weights (LLM) -> pure scorer ranking (D3: the model never orders products)."""
+    """Weights (LLM) -> pure scorer ranking (D3: the model never orders products).
+
+    The D11 refinement sort (when the shopper picked one) re-orders the
+    scored list afterwards — ordering stays a pure function of data, never a
+    model decision.
+    """
     _emit(("status", {"stage": "ranking"}))
-    priorities = state.get("intent", {}).get("priorities") or {}
+    intent = state.get("intent", {})
+    priorities = intent.get("priorities") or {}
     context_names = [
         name
         for name, salience in priorities.items()
@@ -827,6 +1014,8 @@ def recommend_node(state: ShoppingState) -> dict[str, Any]:
     if not any(value > 0.0 for value in weights.values()):
         weights = _fallback_weights(priorities)
     ranked = score_products(state.get("candidates", []), weights)
+    by_id = {product.id: product for product in get_catalog()}
+    ranked = _apply_sort(ranked, intent.get("sort"), by_id)
     return {"ranked": ranked, "weights": weights}
 
 
@@ -844,6 +1033,90 @@ _PLAN_ERROR_PAYLOAD: dict[str, str] = {
 #: returned this same string in every mode, so the title is now a constant —
 #: normal turns make 3 model calls (intent, weights, narration), not 4.
 PLAN_TITLE: str = "Best matches for your needs"
+
+# ---------------------------------------------------------------------------
+# Refinement bar (D11): the grid echoes the applied state and offers the
+# chip table that re-targets it. Chip targets are FIXED (battery 40h, price
+# $150) module constants so the bar is deterministic and test-pinnable.
+# ---------------------------------------------------------------------------
+
+ASK_PRIORITIES_QUESTION: str = "What matters most? Pick up to 2."
+
+#: The multi-picker options (D11) in canonical-priority order; each label
+#: maps onto a weight key via the ``_PRIORITY_ALIASES`` table.
+PRIORITY_OPTIONS: tuple[str, ...] = (
+    "Noise cancellation",
+    "Comfort",
+    "Battery life",
+    "Sound quality",
+    "Value for money",
+)
+
+#: Fixed chip targets for the refinement bar.
+CHIP_BATTERY_HOURS: float = 40.0
+CHIP_MAX_PRICE_USD: float = 150.0
+
+_SORT_CHIP_LABELS: dict[str, str] = {
+    "rating": "Top rated",
+    "price_asc": "Price: low to high",
+    "price_desc": "Price: high to low",
+}
+
+
+def _refinement_state(intent: dict[str, Any]) -> RefinementState:
+    """The refinement state a grid was built under, from the merged intent."""
+    sort = intent.get("sort")
+    return RefinementState(
+        sort=sort if sort in _REFINE_SORTS else "relevance",
+        filters=RefinementFilters(
+            anc_only=bool(intent.get("anc_only")) or None,
+            min_battery_hours=_coerce_float(intent.get("min_battery_hours")),
+            max_price_usd=_coerce_float(intent.get("refine_max_price")),
+        ),
+    )
+
+
+def _refine_chips(refinement: RefinementState) -> list[UIAction]:
+    """The chip table for one refinement state (deterministic order: sorts,
+    filter targets, then a single clear chip when anything deviates).
+
+    A chip whose target EQUALS the current state is omitted (no dead chip);
+    the clear chip ships the relevance/empty target and appears only when
+    the state is not already default.
+    """
+    chips: list[UIAction] = []
+    for sort, label in _SORT_CHIP_LABELS.items():
+        if refinement.sort != sort:
+            chips.append(UIAction(type="refine", label=label, payload={"sort": sort}))
+    if not refinement.filters.anc_only:
+        chips.append(UIAction(type="refine", label="ANC only", payload={"ancOnly": True}))
+    if refinement.filters.min_battery_hours != CHIP_BATTERY_HOURS:
+        chips.append(
+            UIAction(
+                type="refine",
+                label=f"{CHIP_BATTERY_HOURS:g}h+ battery",
+                payload={"minBatteryHours": CHIP_BATTERY_HOURS},
+            )
+        )
+    if refinement.filters.max_price_usd != CHIP_MAX_PRICE_USD:
+        chips.append(
+            UIAction(
+                type="refine",
+                label=f"Under ${CHIP_MAX_PRICE_USD:g}",
+                payload={"maxPriceUsd": CHIP_MAX_PRICE_USD},
+            )
+        )
+    is_default = (
+        refinement.sort == "relevance"
+        and refinement.filters.anc_only is None
+        and refinement.filters.min_battery_hours is None
+        and refinement.filters.max_price_usd is None
+    )
+    if not is_default:
+        chips.append(
+            UIAction(type="refine", label="Clear refinements", payload={"sort": "relevance"})
+        )
+    return chips
 
 
 def _envelope(state: ShoppingState) -> dict[str, Any]:
@@ -873,17 +1146,41 @@ def _cart_view_plan(
     """Deterministic ``cart_view`` plan: lines + catalog-priced total.
 
     Policy (mirrors the ``cart-one-item.json`` fixture): one
-    ``remove_from_cart`` action per line while there are at most 3 lines,
-    none beyond that. ``amends_turn_id`` (D2 amendment) is set only when the
-    session already has a cart region: the new plan then supersedes THAT
-    turn's plan in place instead of appending a duplicate cart section.
+    ``remove_from_cart`` action per line plus its D11 ``set_quantity``
+    steppers — only in-bounds steps ship (no "−" at 1, no "+" at 10), the
+    steppers' glyph labels render as −/+ controls — while there are at most
+    3 lines, no actions beyond that. ``amends_turn_id`` (D2 amendment) is
+    set only when the session already has a cart region: the new plan then
+    supersedes THAT turn's plan in place instead of appending a duplicate
+    cart section.
     """
     summary = get_cart(cart, get_catalog())
     lines = list(summary.lines)
-    actions = [
-        UIAction(type="remove_from_cart", label="Remove", payload={"productId": line.product_id})
-        for line in lines
-    ]
+    actions: list[UIAction] = []
+    for line in lines:
+        actions.append(
+            UIAction(
+                type="remove_from_cart",
+                label="Remove",
+                payload={"productId": line.product_id},
+            )
+        )
+        if line.quantity > 1:
+            actions.append(
+                UIAction(
+                    type="set_quantity",
+                    label="−",
+                    payload={"productId": line.product_id, "quantity": line.quantity - 1},
+                )
+            )
+        if line.quantity < MAX_QUANTITY:
+            actions.append(
+                UIAction(
+                    type="set_quantity",
+                    label="+",
+                    payload={"productId": line.product_id, "quantity": line.quantity + 1},
+                )
+            )
     if len(lines) > 3:
         actions = []
     envelope = _envelope(state)
@@ -1014,6 +1311,10 @@ def _build_followup_plan(
     elif kind == "remove_from_cart":
         cart = remove_from_cart(cart, get_catalog(), targets[0])
         extra = {"cart": cart}
+    elif kind == "set_quantity":
+        quantity = followup.get("quantity")
+        cart = set_quantity(cart, get_catalog(), targets[0], int(quantity) if quantity else 1)
+        extra = {"cart": cart}
     # D2 amendment: every ``cart_view`` supersedes the anchored first cart
     # plan in place via ``amendsTurnId``; only the FIRST cart mutation emits
     # a standalone plan and records the anchor. The plan's own ``turnId``
@@ -1058,6 +1359,7 @@ def ui_plan_node(state: ShoppingState) -> dict[str, Any]:
                 )
                 for scored in top
             ]
+            refinement = _refinement_state(state.get("intent", {}))
             plan = UIPlan(
                 **_envelope(state),
                 root=ComponentNode(
@@ -1067,11 +1369,13 @@ def ui_plan_node(state: ShoppingState) -> dict[str, Any]:
                         product_ids=top_ids,
                         ranked=True,
                         products=grid_products,
+                        refinement=refinement,
                     ),
                     actions=[
                         UIAction(type="compare", label="Compare"),
                         UIAction(type="details", label="Details"),
                         UIAction(type="add_to_cart", label="Add to cart"),
+                        *_refine_chips(refinement),
                     ],
                 ),
             )
@@ -1164,6 +1468,9 @@ def _followup_narration(
         return f"Here's more about {names[0]}."
     if kind == "add_to_cart":
         return f"Added {names[0]} to your cart."
+    if kind == "set_quantity":
+        quantity = followup.get("quantity")
+        return f"Quantity for {names[0]} set to {quantity}."
     if kind == "remove_from_cart":
         return f"Removed {names[0]} from your cart."
     # cart_view: lines with quantities plus the catalog-priced total.

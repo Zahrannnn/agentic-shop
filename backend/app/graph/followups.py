@@ -47,9 +47,11 @@ TOP_N: int = 3
 #: UI-action types a follow-up turn resolves without any model call. A
 #: ``choose`` action (the comparison table's pick button) maps to a details
 #: turn: the shopper singled one product out, and the natural next step is
-#: inspecting it.
+#: inspecting it. ``set_quantity`` (D11 cart steppers) re-renders the cart
+#: with the stepped quantity. ``refine``/``select_preferences`` are chip
+#: fast-paths (D11) — they never reach the resolver.
 FOLLOWUP_ACTION_TYPES: frozenset[str] = frozenset(
-    {"compare", "details", "add_to_cart", "remove_from_cart", "choose"}
+    {"compare", "details", "add_to_cart", "remove_from_cart", "choose", "set_quantity"}
 )
 
 #: Attributes of every follow-up ``comparison_table`` (contracts/ui-dsl.md
@@ -75,6 +77,7 @@ FOLLOWUP_KINDS = (
     "details",
     "add_to_cart",
     "remove_from_cart",
+    "set_quantity",
     "cart_view",
     "disclosure",
 )
@@ -87,12 +90,14 @@ class FollowUp:
     ``kind`` is one of :data:`FOLLOWUP_KINDS`; ``product_ids`` carries the
     resolved targets (empty for ``cart_view``/``disclosure``); ``disclosure``
     is set only for the ``disclosure`` kind, whose turn ends cleanly with a
-    text_block plan instead of an error frame.
+    text_block plan instead of an error frame. ``quantity`` carries the
+    stepped quantity for the ``set_quantity`` kind (clamped [1, 10]).
     """
 
     kind: str
     product_ids: tuple[str, ...] = ()
     disclosure: str | None = None
+    quantity: int | None = None
 
     def to_state(self) -> dict[str, Any]:
         """Plain-dict form stored under ``state["followup"]``."""
@@ -100,6 +105,7 @@ class FollowUp:
             "kind": self.kind,
             "product_ids": list(self.product_ids),
             "disclosure": self.disclosure,
+            "quantity": self.quantity,
         }
 
 
@@ -251,6 +257,20 @@ def _resolve_action_followup(action: dict[str, Any], state: ShoppingState) -> Fo
         return FollowUp(kind="details", product_ids=(target,))
     if kind == "add_to_cart":
         return FollowUp(kind="add_to_cart", product_ids=(target,))
+    if kind == "set_quantity":
+        raw_quantity = payload.get("quantity")
+        quantity = (
+            raw_quantity
+            if isinstance(raw_quantity, int)
+            and not isinstance(raw_quantity, bool)
+            and 1 <= raw_quantity <= 10
+            else None
+        )
+        if quantity is None:
+            # A stepper action without a sane quantity cannot be applied;
+            # treat it like an unresolvable target and disclose cleanly.
+            return _no_products()
+        return FollowUp(kind="set_quantity", product_ids=(target,), quantity=quantity)
     return FollowUp(kind="remove_from_cart", product_ids=(target,))
 
 

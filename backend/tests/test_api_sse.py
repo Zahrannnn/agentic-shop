@@ -89,11 +89,15 @@ async def test_us1_plan_is_validated_grid_within_budget(client) -> None:
     assert all(catalog[pid].price_usd <= 200.0 for pid in product_ids)
     assert product_ids[0] == _TOP_PICK
 
+    # D11: card/sort-level actions plus the refinement chip table (the grid
+    # always carries its state + chips).
     assert [action["type"] for action in root["actions"]] == [
         "compare",
         "details",
         "add_to_cart",
+        *["refine"] * 6,
     ]
+    assert root["props"]["refinement"]["sort"] == "relevance"
 
 
 async def test_us1_narration_is_grounded_in_top_pick(client) -> None:
