@@ -32,6 +32,8 @@ from typing import Any
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, ValidationError
 
+from app.llm.intent_rules import extract_intent_fields
+
 __all__ = [
     "MockChatLLM",
     "StructuredOutputError",
@@ -58,16 +60,6 @@ _WEIGHT_KEYS: tuple[str, str, str, str, str] = ("battery", "comfort", "anc", "so
 #: factor repeats so behaviour stays total and deterministic.
 _WEIGHT_SCALES: dict[int, tuple[float, ...]] = {1: (1.0,), 2: (1.0, 0.8)}
 
-# Priority keyword patterns for intent extraction, checked in this fixed order
-# (determinism, constitution III). Case-insensitive substrings/words.
-_INTENT_PRIORITY_PATTERNS: tuple[tuple[str, str], ...] = (
-    (r"noise[ -]?cancell|\banc\b", "anc"),
-    (r"comfort", "comfort"),
-    (r"battery", "battery"),
-    (r"sound", "sound"),
-    (r"cheap|value", "value"),
-)
-
 #: Aliases used to normalise arbitrary priority names (from the context block)
 #: onto canonical weight keys. First matching alias wins.
 _PRIORITY_ALIASES: tuple[tuple[str, str], ...] = (
@@ -80,22 +72,6 @@ _PRIORITY_ALIASES: tuple[tuple[str, str], ...] = (
     ("cheap", "value"),
     ("value", "value"),
     ("price", "value"),
-)
-
-_USE_CASE_RE = re.compile(r"\bfor\s+([^\n]+)", re.IGNORECASE)
-#: Use case runs until punctuation or a budget mention ("...for long flights
-#: under $200" -> "long flights").
-_USE_CASE_CUT_RE = re.compile(r"[.,;!?]|\bunder\b\s*\$?\s*\d|\$\s?\d")
-_BUDGET_RE = re.compile(r"\$\s?(\d[\d,]*)")
-#: Category patterns in fixed precedence order (determinism, constitution III):
-#: the FIRST matching pattern wins, so a message that somehow names both
-#: categories is classified as the earlier entry ("headphones"). "headphones"
-#: never contains the earbud spellings and vice versa, so the order only
-#: matters for pathological multi-category messages — documented here and
-#: pinned by tests.
-_CATEGORY_PATTERNS: tuple[tuple[str, str], ...] = (
-    (r"headphones?\b", "headphones"),
-    (r"ear[\s-]?buds?\b", "earbuds"),
 )
 
 
@@ -228,41 +204,14 @@ def _canonical_priority_key(name: str) -> str | None:
     return None
 
 
-def _extract_use_case(text: str) -> str | None:
-    """Text after the first `` for ``, up to punctuation or a budget mention."""
-    match = _USE_CASE_RE.search(text)
-    if match is None:
-        return None
-    segment = match.group(1)
-    cut = _USE_CASE_CUT_RE.search(segment)
-    if cut is not None:
-        segment = segment[: cut.start()]
-    segment = segment.strip().strip("\"'").strip()
-    return segment or None
-
-
 def _intent_extraction_handler(text: str, context: dict[str, Any]) -> dict[str, Any]:
-    """Regex-based deterministic intent extraction over the user text."""
+    """Regex-based deterministic intent extraction over the user text.
+
+    The rules live in :mod:`app.llm.intent_rules` so the mock Jev judgment
+    layer derives identical answers from the same baseline (D9).
+    """
     _ = context  # intent comes from the user text only
-    lowered = text.lower()
-    data: dict[str, Any] = {}
-    budget_match = _BUDGET_RE.search(text)
-    if budget_match is not None:
-        budget = int(budget_match.group(1).replace(",", ""))
-        # Emit both spellings; field filtering keeps whichever the schema uses.
-        data["budget"] = budget
-        data["budget_usd"] = budget
-    data["category"] = next(
-        (slug for pattern, slug in _CATEGORY_PATTERNS if re.search(pattern, lowered)),
-        None,
-    )
-    priorities: dict[str, float] = {}
-    for pattern, key in _INTENT_PRIORITY_PATTERNS:
-        if key not in priorities and re.search(pattern, lowered):
-            priorities[key] = 1.0
-    data["priorities"] = priorities
-    data["use_case"] = _extract_use_case(text)
-    return data
+    return extract_intent_fields(text)
 
 
 def _preference_weights_handler(text: str, context: dict[str, Any]) -> dict[str, Any]:

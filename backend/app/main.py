@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
-from app.config import get_settings, require_real_config
+from app.config import get_settings, require_jev_config, require_real_config
 
 TAGS_METADATA = [
     {
@@ -65,6 +65,7 @@ restart without the flag. A second message while a turn is still streaming answe
 def create_app() -> FastAPI:
     """Build the app: fail-fast config check, CORS allowlist, API router."""
     require_real_config()
+    require_jev_config()
     settings = get_settings()
     application = FastAPI(
         title="agentic-shop API",

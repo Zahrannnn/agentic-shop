@@ -203,7 +203,7 @@ class ErrorEvent(_ProtocolEvent):
     event_name: ClassVar[str] = "error"
 
     message: str
-    code: Literal["structured_output", "busy", "unknown_session", "internal"] = "internal"
+    code: Literal["structured_output", "jev", "busy", "unknown_session", "internal"] = "internal"
 
 
 ProtocolEvent = StatusEvent | MessageDeltaEvent | UIUpdateEvent | TurnEndEvent | ErrorEvent

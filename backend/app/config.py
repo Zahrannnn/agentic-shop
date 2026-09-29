@@ -17,6 +17,11 @@ _LLM_MODES: frozenset[str] = frozenset({"mock", "real"})
 #: The only valid ``LLM_API_STYLE`` values (validated case-insensitively).
 _LLM_API_STYLES: frozenset[str] = frozenset({"auto", "responses"})
 
+#: The only valid ``JEV_MODE`` values (validated case-insensitively). ``off``
+#: keeps the LLM intent path; ``mock``/``real`` route intent through the Jev
+#: judgment layer (DECISIONS.md D9).
+_JEV_MODES: frozenset[str] = frozenset({"off", "mock", "real"})
+
 
 class Settings(BaseSettings):
     """Process settings loaded from environment (and optional .env file)."""
@@ -37,6 +42,12 @@ class Settings(BaseSettings):
     #: Comma-separated browser origins allowed to call the API from a browser
     #: (CORS; architecture-review fix). Defaults are the Next.js dev servers.
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+    #: TypeSafe Jev judgment layer (D9): ``off`` (default — LLM intent path),
+    #: ``mock`` (deterministic keyless judgments), or ``real`` (api.typesafe.ai).
+    JEV_MODE: str = "off"
+    JEV_API_KEY: str = ""
+    JEV_MODEL: str = "jev-latest"
+    JEV_BASE_URL: str = "https://api.typesafe.ai/v1/systemone"
 
     @field_validator("LLM_MODE", mode="after")
     @classmethod
@@ -62,11 +73,26 @@ class Settings(BaseSettings):
             raise ValueError(f"LLM_API_STYLE must be one of: {allowed} (got {value!r})")
         return normalized
 
+    @field_validator("JEV_MODE", mode="after")
+    @classmethod
+    def _validate_jev_mode(cls, value: str) -> str:
+        """Only ``off`` / ``mock`` / ``real`` (case-insensitive, stripped); normalize."""
+        normalized = value.strip().lower()
+        if normalized not in _JEV_MODES:
+            allowed = ", ".join(sorted(_JEV_MODES))
+            raise ValueError(f"JEV_MODE must be one of: {allowed} (got {value!r})")
+        return normalized
+
     @property
     def is_mock(self) -> bool:
         if self.LLM_MODE != "real":
             return True
         return not (self.LLM_MODEL and self.OPENCODE_API_KEY)
+
+    @property
+    def jev_enabled(self) -> bool:
+        """True when intent extraction runs through the Jev judgment layer."""
+        return self.JEV_MODE != "off"
 
     @property
     def allowed_origins(self) -> list[str]:
@@ -94,4 +120,18 @@ def require_real_config(settings: Settings | None = None) -> None:
         raise RuntimeError(
             "LLM_MODE=real requires configured: " + ", ".join(missing) + ". "
             "Set them in the environment or .env, or use LLM_MODE=mock."
+        )
+
+
+def require_jev_config(settings: Settings | None = None) -> None:
+    """Fail fast when JEV_MODE=real lacks its API key (D9, same spirit as
+    :func:`require_real_config` — misconfiguration surfaces at startup)."""
+    s = settings or get_settings()
+    if s.JEV_MODE.strip().lower() != "real":
+        return
+    if not s.JEV_API_KEY:
+        raise RuntimeError(
+            "JEV_MODE=real requires JEV_API_KEY to be set in the environment "
+            "or .env (constitution II: no hard-coded credentials). Use "
+            "JEV_MODE=mock for keyless offline runs."
         )
