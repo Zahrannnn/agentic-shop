@@ -25,7 +25,7 @@ export const PLAN_COMPONENT_TYPES = [
 export type PlanComponentType = (typeof PLAN_COMPONENT_TYPES)[number];
 
 /** Full action vocabulary of the contract. */
-const PLAN_ACTION_TYPES = [
+export const PLAN_ACTION_TYPES = [
   "compare",
   "details",
   "select_preference",

@@ -5,8 +5,10 @@ import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/shared/utils/cn";
 
+import { A2uiRenderer } from "./a2ui/a2ui-renderer";
 import { PlanRenderer } from "./plan-renderer";
 import { reassuranceFor } from "./thinking-copy";
+import type { A2uiMessage } from "../validations/a2ui-schema";
 import type { PlanAction, UiPlan } from "../validations/plan-schema";
 import { turnProse, type Turn } from "../store";
 
@@ -76,6 +78,12 @@ export type TranscriptTurnProps = {
   /** True while THIS turn is the live, streaming one (input locked). */
   isStreaming: boolean;
   onAction: (action: PlanAction) => void;
+  /**
+   * Which stack renders the plan region (D10 side-by-side): the native
+   * registry (default) or the A2UI projection when the turn has one. A turn
+   * without a blueprint falls back to native with a small notice.
+   */
+  rendererKind?: "native" | "a2ui";
 };
 
 export function TranscriptTurn({
@@ -83,6 +91,7 @@ export function TranscriptTurn({
   isLatest,
   isStreaming,
   onAction,
+  rendererKind = "native",
 }: TranscriptTurnProps) {
   const working = isStreaming && turn.terminal === null;
   const waitingForProse = working && turn.deltas.length === 0;
@@ -140,7 +149,24 @@ export function TranscriptTurn({
         ) : null}
 
         {turn.planState === "rendered" ? (
-          <PlanRenderer plan={turn.plan as UiPlan} onAction={onAction} />
+          rendererKind === "a2ui" && turn.blueprint !== null ? (
+            <A2uiRenderer
+              messages={turn.blueprint as A2uiMessage[]}
+              onAction={onAction}
+            />
+          ) : rendererKind === "a2ui" ? (
+            <div className="max-w-prose space-y-2">
+              <p
+                className="text-xs uppercase tracking-[0.05em] text-muted-foreground"
+                data-testid="a2ui-missing-notice"
+              >
+                No A2UI payload for this turn — native render
+              </p>
+              <PlanRenderer plan={turn.plan as UiPlan} onAction={onAction} />
+            </div>
+          ) : (
+            <PlanRenderer plan={turn.plan as UiPlan} onAction={onAction} />
+          )
         ) : null}
 
         {errorMessage !== null ? (

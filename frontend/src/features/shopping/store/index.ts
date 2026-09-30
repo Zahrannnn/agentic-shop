@@ -11,6 +11,8 @@ export {
 } from "./session-slice";
 export {
   STAGE_ORDER,
+  blueprintAmended,
+  blueprintReceived,
   deltaAppended,
   phaseSetIdle,
   planAmended,

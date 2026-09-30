@@ -14,6 +14,8 @@ import {
 } from "../api/agent-client";
 import {
   STAGE_ORDER,
+  blueprintAmended,
+  blueprintReceived,
   deltaAppended,
   phaseSetIdle,
   planAmended,
@@ -34,6 +36,7 @@ import {
   type Stage,
 } from "../store";
 import { CATALOG_IDS } from "../utils/catalog-refs";
+import { parseA2uiBlueprint } from "../validations/a2ui-schema";
 import { parseUiPlan } from "../validations/plan-schema";
 
 /**
@@ -122,6 +125,10 @@ export function useAgentTurn() {
       const markTerminated = () => {
         terminated = true;
       };
+      // The A2UI payload does not carry the plan's amendsTurnId; the plan
+      // handler records it so the blueprint handler can anchor the projection
+      // to the same amended turn (D2 amendment, both renderers in sync).
+      let lastAmendsTurnId: number | null = null;
       // An array (not a `let`) because the assignment happens inside a
       // handler closure the type checker cannot see into.
       const httpFailures: { status: number; detail: unknown }[] = [];
@@ -152,6 +159,7 @@ export function useAgentTurn() {
               // Bounded amendment (D2 amendment): a cart plan superseding an
               // earlier cart turn updates THAT turn's plan region in place —
               // the current mutation turn stays prose-only.
+              lastAmendsTurnId = result.plan.amendsTurnId;
               dispatch(
                 planAmended({
                   amendsTurnId: result.plan.amendsTurnId,
@@ -161,6 +169,25 @@ export function useAgentTurn() {
               return;
             }
             dispatch(planReceived(result.plan));
+          },
+          onA2ui: (raw) => {
+            // Optional A2UI projection (D10): validated by its own gate; an
+            // invalid or absent projection is a skip, never a turn error —
+            // the native plan renders regardless.
+            const result = parseA2uiBlueprint(raw);
+            if (!result.ok) {
+              return;
+            }
+            if (lastAmendsTurnId !== null) {
+              dispatch(
+                blueprintAmended({
+                  amendsTurnId: lastAmendsTurnId,
+                  messages: result.blueprint.messages,
+                }),
+              );
+              return;
+            }
+            dispatch(blueprintReceived(result.blueprint.messages));
           },
           onTurnEnd: () => {
             markTerminated();

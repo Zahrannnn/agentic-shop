@@ -4,8 +4,8 @@
 
 **Created**: 2026-09-29
 
-**Status**: In progress (PR 1 on `feat/jev-intent-judgment`, PR 2 on
-`feat/a2ui-projection`; PR 3 pending)
+**Status**: Complete (PR 1 `feat/jev-intent-judgment`, PR 2
+`feat/a2ui-projection`, PR 3 `feat/a2ui-renderer`)
 
 **Input**: Owner-directed practice — adopt two 2026 agent-stack technologies
 in small, additive slices: **TypeSafe Jev** (the "System One" typed-decision
