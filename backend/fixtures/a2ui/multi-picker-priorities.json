@@ -1,0 +1,116 @@
+[
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "spec-fixture-1",
+      "catalogId": "https://agentic-shop.local/a2ui/catalogs/shopping/v1.json"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "spec-fixture-1",
+      "components": [
+        {
+          "id": "root",
+          "component": "Card",
+          "child": "body"
+        },
+        {
+          "id": "body",
+          "component": "Column",
+          "children": [
+            "multi-question",
+            "option-check-0",
+            "option-check-1",
+            "option-check-2",
+            "option-check-3",
+            "option-check-4",
+            "multi-apply"
+          ]
+        },
+        {
+          "id": "multi-question",
+          "component": "Text",
+          "text": "What matters most? Pick up to 2.",
+          "variant": "h3"
+        },
+        {
+          "id": "option-check-0",
+          "component": "CheckBox",
+          "value": {
+            "path": "/selections/Noise cancellation"
+          },
+          "label": "Noise cancellation"
+        },
+        {
+          "id": "option-check-1",
+          "component": "CheckBox",
+          "value": {
+            "path": "/selections/Comfort"
+          },
+          "label": "Comfort"
+        },
+        {
+          "id": "option-check-2",
+          "component": "CheckBox",
+          "value": {
+            "path": "/selections/Battery life"
+          },
+          "label": "Battery life"
+        },
+        {
+          "id": "option-check-3",
+          "component": "CheckBox",
+          "value": {
+            "path": "/selections/Sound quality"
+          },
+          "label": "Sound quality"
+        },
+        {
+          "id": "option-check-4",
+          "component": "CheckBox",
+          "value": {
+            "path": "/selections/Value for money"
+          },
+          "label": "Value for money"
+        },
+        {
+          "id": "multi-apply-text",
+          "component": "Text",
+          "text": "Show my picks"
+        },
+        {
+          "id": "multi-apply",
+          "component": "Button",
+          "child": "multi-apply-text",
+          "action": {
+            "event": {
+              "name": "select_preferences",
+              "context": {
+                "values": [],
+                "label": "Show my picks"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateDataModel": {
+      "surfaceId": "spec-fixture-1",
+      "value": {
+        "question": "What matters most? Pick up to 2.",
+        "selections": {
+          "Noise cancellation": false,
+          "Comfort": false,
+          "Battery life": false,
+          "Sound quality": false,
+          "Value for money": false
+        }
+      }
+    }
+  }
+]

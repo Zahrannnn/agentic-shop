@@ -26,7 +26,8 @@ type FixtureName =
   | "preference-picker-category"
   | "comparison-two"
   | "product-details"
-  | "cart-one-item";
+  | "cart-one-item"
+  | "multi-picker-priorities";
 
 const loadFixture = (name: FixtureName): unknown =>
   JSON.parse(readFileSync(resolve(FIXTURES_DIR, `${name}.json`), "utf8"));
@@ -83,7 +84,7 @@ describe("PlanRenderer with the product-grid fixture", () => {
     expect(within(cards[1]).getByText("Cloudline Air")).toBeInTheDocument();
 
     // One button per unique action type: compare grid-level, details and
-    // add_to_cart attached to every card.
+    // add_to_cart attached to every card, plus the D11 refinement chips.
     expect(screen.getByRole("button", { name: "Compare" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Details" })).toHaveLength(3);
     expect(screen.getAllByRole("button", { name: "Add to cart" })).toHaveLength(3);
@@ -92,8 +93,27 @@ describe("PlanRenderer with the product-grid fixture", () => {
     // The compare action posts the verbatim action object (same reference).
     fireEvent.click(screen.getByRole("button", { name: "Compare" }));
     expect(onAction).toHaveBeenCalledTimes(1);
-    expect(onAction).toHaveBeenCalledWith(root.actions[0]);
     expect(onAction.mock.calls[0]?.[0]).toBe(root.actions[0]);
+  });
+
+  it("renders the refinement bar with the active chip pressed and posts chips verbatim (D11)", () => {
+    const plan = parseFixture("product-grid-flights");
+    const root = expectRoot(plan, "product_grid");
+    const onAction = renderPlan(plan);
+
+    const bar = screen.getByTestId("refinement-bar");
+    const chips = within(bar).getAllByTestId("action-refine");
+    expect(chips).toHaveLength(6); // 3 sorts + 3 filter targets
+
+    // `relevance` is the active sort and the fixture has no filters, so no
+    // chip matches the current state — none pressed.
+    expect(chips.every((chip) => chip.getAttribute("aria-pressed") === "false")).toBe(true);
+
+    const ancChip = within(bar).getByRole("button", { name: "ANC only" });
+    fireEvent.click(ancChip);
+    expect(onAction).toHaveBeenCalledTimes(1);
+    const refineChips = root.actions.filter((action) => action.type === "refine");
+    expect(onAction.mock.calls[0]?.[0]).toBe(refineChips[3]);
   });
 
   it("wires per-card actions with the card's productId stamped into the payload", () => {
@@ -217,6 +237,66 @@ describe("PlanRenderer with the cart-view fixture", () => {
     fireEvent.click(remove);
     expect(onAction).toHaveBeenCalledTimes(1);
     expect(onAction.mock.calls[0]?.[0]).toBe(root.actions[0]);
+  });
+
+  it("renders the quantity stepper and posts the step verbatim (D11)", () => {
+    const plan = parseFixture("cart-one-item");
+    const root = expectRoot(plan, "cart_view");
+    const onAction = renderPlan(plan);
+
+    const steps = screen.getAllByTestId("action-set_quantity");
+    expect(steps).toHaveLength(1); // quantity 1 → only "+" is in bounds
+    expect(steps[0]).toHaveAttribute("data-target-quantity", "2");
+    expect(steps[0]).toHaveTextContent("+");
+
+    fireEvent.click(steps[0]);
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onAction.mock.calls[0]?.[0]).toBe(root.actions[1]);
+    expect(onAction.mock.calls[0]?.[0].payload).toEqual({
+      productId: "aurora-hush-pro",
+      quantity: 2,
+    });
+  });
+});
+
+describe("PlanRenderer with the multi-picker fixture", () => {
+  it("renders checkbox options, enforces maxSelect, and stamps values on apply (D11)", () => {
+    const plan = parseFixture("multi-picker-priorities");
+    const root = expectRoot(plan, "multi_picker");
+    const onAction = renderPlan(plan);
+
+    expect(screen.getByTestId("plan-multi_picker")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "What matters most? Pick up to 2." }),
+    ).toBeInTheDocument();
+
+    const options = screen.getAllByTestId("multi-option");
+    expect(options).toHaveLength(5);
+
+    // The apply button starts disabled (nothing selected).
+    const apply = screen.getByTestId("action-select_preferences");
+    expect(apply).toBeDisabled();
+
+    // Pick two: the bound is reached, so the third row disables.
+    fireEvent.click(options[0]);
+    fireEvent.click(options[1]);
+    expect(options[0]).toBeChecked();
+    expect(options[1]).toBeChecked();
+    expect(options[2]).toBeDisabled();
+
+    // Uncheck one: the bound frees up again.
+    fireEvent.click(options[1]);
+    expect(options[2]).not.toBeDisabled();
+    fireEvent.click(options[2]);
+
+    expect(apply).toBeEnabled();
+    fireEvent.click(apply);
+    expect(onAction).toHaveBeenCalledTimes(1);
+    // The stamping exception: values composed from the local selection.
+    expect(onAction.mock.calls[0]?.[0].type).toBe("select_preferences");
+    expect(onAction.mock.calls[0]?.[0].payload).toEqual({
+      values: [root.props.options[0], root.props.options[2]],
+    });
   });
 });
 

@@ -1,0 +1,26 @@
+{
+  "planVersion": "1",
+  "sessionId": "spec-fixture",
+  "turnId": 1,
+  "root": {
+    "type": "multi_picker",
+    "props": {
+      "question": "What matters most? Pick up to 2.",
+      "options": [
+        "Noise cancellation",
+        "Comfort",
+        "Battery life",
+        "Sound quality",
+        "Value for money"
+      ],
+      "maxSelect": 2
+    },
+    "actions": [
+      {
+        "type": "select_preferences",
+        "label": "Show my picks",
+        "payload": { "values": [] }
+      }
+    ]
+  }
+}

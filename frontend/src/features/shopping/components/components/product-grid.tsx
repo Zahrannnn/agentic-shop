@@ -3,7 +3,11 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/utils/cn";
-import type { PlanAction, ProductGridProps } from "../../validations/plan-schema";
+import type {
+  PlanAction,
+  ProductGridProps,
+  RefinementState,
+} from "../../validations/plan-schema";
 
 /**
  * Ranked product grid (Curator's Desk, ecommerce register): each card is a
@@ -37,18 +41,89 @@ function withProduct(action: PlanAction, productId: string): PlanAction {
   return { ...action, payload: { ...action.payload, productId } };
 }
 
+/** Deep-ish equality against the plan's refinement state: a chip is "active"
+ * when its flat target payload (D11) matches the state the grid was built
+ * under. */
+function isSameRefinement(
+  payload: PlanAction["payload"],
+  state: RefinementState,
+): boolean {
+  const sort = payload.sort ?? "relevance";
+  const active = state.filters;
+  return (
+    sort === state.sort &&
+    Boolean(payload.ancOnly) === Boolean(active.ancOnly) &&
+    (payload.minBatteryHours ?? null) === (active.minBatteryHours ?? null) &&
+    (payload.maxPriceUsd ?? null) === (active.maxPriceUsd ?? null)
+  );
+}
+
+/** The refinement bar (D11): one chip per backend-emitted `refine` action,
+ * each chip posting its complete target payload verbatim. The chip matching
+ * the current state renders pressed. */
+function RefinementBar({
+  chips,
+  refinement,
+  onAction,
+}: {
+  chips: PlanAction[];
+  refinement: RefinementState;
+  onAction: (action: PlanAction) => void;
+}) {
+  if (chips.length === 0) {
+    return null;
+  }
+  return (
+    <div
+      role="group"
+      aria-label="Refine results"
+      data-testid="refinement-bar"
+      className="mt-3 flex flex-wrap items-center gap-2"
+    >
+      <span className="text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
+        Refine
+      </span>
+      {chips.map((chip, index) => {
+        const active = isSameRefinement(chip.payload, refinement);
+        return (
+          <Button
+            key={`${chip.label}-${index}`}
+            variant={active ? "secondary" : "outline"}
+            size="sm"
+            aria-pressed={active}
+            data-testid="action-refine"
+            data-refine-label={chip.label}
+            onClick={() => onAction(chip)}
+          >
+            {chip.label}
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ProductGrid({ props, actions, onAction }: ProductGridComponentProps) {
   // One button per unique action type: details/add_to_cart attach to every
-  // card, compare is a single grid-level control. Actions post verbatim —
-  // positional resolution happens server-side, never here.
+  // card, compare is a single grid-level control, and each refine chip is its
+  // own grid-level action. Actions post verbatim — positional resolution
+  // happens server-side, never here.
   const compareAction = actions.find((action) => action.type === "compare");
   const detailsAction = actions.find((action) => action.type === "details");
   const addToCartAction = actions.find((action) => action.type === "add_to_cart");
+  const refineChips = actions.filter((action) => action.type === "refine");
   const snapshot = new Map((props.products ?? []).map((product) => [product.id, product]));
 
   return (
     <section data-testid="plan-product_grid">
       <h2 className="text-xl font-semibold tracking-tight">{props.title}</h2>
+      {props.refinement ? (
+        <RefinementBar
+          chips={refineChips}
+          refinement={props.refinement}
+          onAction={onAction}
+        />
+      ) : null}
       <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {props.productIds.map((productId, index) => {
           const recommended = props.ranked && index === 0;

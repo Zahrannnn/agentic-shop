@@ -24,6 +24,7 @@ ComponentType = Literal[
     "product_details",
     "cart_view",
     "text_block",
+    "multi_picker",
 ]
 
 ActionType = Literal[
@@ -33,18 +34,22 @@ ActionType = Literal[
     "add_to_cart",
     "remove_from_cart",
     "choose",
+    "refine",
+    "set_quantity",
+    "select_preferences",
 ]
 
-#: Actions each component type may carry (contracts/ui-dsl.md rule 4).
+#: Actions each component type may carry (contracts/ui-dsl.md rule 4; D11).
 #: ``cart_view`` keeps ``remove_from_cart`` — the contract's cart_view wire
 #: example ships it and the ``cart-one-item`` fixture depends on it.
 ALLOWED_ACTIONS: dict[str, set[str]] = {
-    "product_grid": {"compare", "details", "add_to_cart"},
+    "product_grid": {"compare", "details", "add_to_cart", "refine"},
     "preference_picker": {"select_preference"},
     "comparison_table": {"choose"},
     "product_details": set(),
-    "cart_view": {"remove_from_cart"},
+    "cart_view": {"remove_from_cart", "set_quantity"},
     "text_block": set(),
+    "multi_picker": {"select_preferences"},
 }
 
 #: Comparison-table attribute whitelist (catalog attribute names + pre-scored
@@ -87,11 +92,41 @@ class GridProduct(BaseModel):
     anc_type: str
 
 
+#: Sort orders the refinement bar (D11) may request. ``relevance`` is the
+#: scorer's recommendation order; the others are pure re-orders of it.
+RefinementSort = Literal["relevance", "price_asc", "price_desc", "rating"]
+
+
+class RefinementFilters(BaseModel):
+    """Hard filters the refinement bar (D11) may apply. Absent = unchanged.
+    Bounds mirror the search-side constraints (``min_battery_hours`` positive,
+    ``max_price_usd`` strictly positive)."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    anc_only: bool | None = None
+    min_battery_hours: float | None = Field(default=None, gt=0.0)
+    max_price_usd: float | None = Field(default=None, gt=0.0)
+
+
+class RefinementState(BaseModel):
+    """The refinement state a ``product_grid`` was built under (D11). The
+    renderer shows it as the bar's active state; ``refine`` actions carry the
+    full TARGET state so taps post verbatim."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    sort: RefinementSort = "relevance"
+    filters: RefinementFilters = Field(default_factory=RefinementFilters)
+
+
 class ProductGridProps(BaseModel):
     """Props for ``product_grid``; ``ranked=True`` means product_ids are in
     recommendation order. ``products`` is an optional per-card snapshot keyed
     1:1 with ``product_ids`` (ecommerce cards render names and prices from
-    it); keys must match ``product_ids`` exactly when present."""
+    it); keys must match ``product_ids`` exactly when present.
+    ``refinement`` (D11) is the bar state — present exactly when the plan
+    carries ``refine`` actions (validated in ``app.dsl.validate``)."""
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -99,6 +134,7 @@ class ProductGridProps(BaseModel):
     product_ids: list[str] = Field(min_length=1, max_length=6)
     ranked: bool
     products: list[GridProduct] | None = None
+    refinement: RefinementState | None = None
 
 
 class PreferencePickerProps(BaseModel):
@@ -175,6 +211,20 @@ class TextBlockProps(BaseModel):
     heading: str | None = None
 
 
+class MultiPickerProps(BaseModel):
+    """Props for ``multi_picker`` (D11): checkbox-style "pick up to N" ask.
+    Exactly one ``select_preferences`` action must ride the node; the client
+    stamps its ``payload['values']`` from the checked options at tap time
+    (the ``withProduct``-style stamping exception, documented in the
+    contract)."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    question: str
+    options: list[str] = Field(min_length=2, max_length=6)
+    max_select: int = Field(default=2, ge=1, le=3)
+
+
 #: Registry mapping node type -> the props class it must carry. Used by
 #: :class:`ComponentNode` to enforce that, e.g., a ``product_grid`` node's
 #: props ARE ``ProductGridProps``.
@@ -185,6 +235,7 @@ _PROPS_BY_TYPE: dict[str, type[BaseModel]] = {
     "product_details": ProductDetailsProps,
     "cart_view": CartViewProps,
     "text_block": TextBlockProps,
+    "multi_picker": MultiPickerProps,
 }
 
 
@@ -207,6 +258,7 @@ class ComponentNode(BaseModel):
         | ProductDetailsProps
         | CartViewProps
         | TextBlockProps
+        | MultiPickerProps
     )
     actions: list[UIAction] = Field(default_factory=list)
 

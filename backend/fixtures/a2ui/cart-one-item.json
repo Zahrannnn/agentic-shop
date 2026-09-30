@@ -36,14 +36,14 @@
           "variant": "caption"
         },
         {
-          "id": "cart-remove-text-0",
+          "id": "cart-line-0-0-text-0",
           "component": "Text",
           "text": "Remove"
         },
         {
-          "id": "cart-remove-0",
+          "id": "cart-line-0-0-0",
           "component": "Button",
-          "child": "cart-remove-text-0",
+          "child": "cart-line-0-0-text-0",
           "action": {
             "event": {
               "name": "remove_from_cart",
@@ -55,12 +55,33 @@
           }
         },
         {
+          "id": "cart-line-0-1-text-1",
+          "component": "Text",
+          "text": "+"
+        },
+        {
+          "id": "cart-line-0-1-1",
+          "component": "Button",
+          "child": "cart-line-0-1-text-1",
+          "action": {
+            "event": {
+              "name": "set_quantity",
+              "context": {
+                "productId": "aurora-hush-pro",
+                "quantity": 2,
+                "label": "+"
+              }
+            }
+          }
+        },
+        {
           "id": "cart-row-0",
           "component": "Row",
           "children": [
             "cart-item-0",
             "cart-qty-0",
-            "cart-remove-0"
+            "cart-line-0-0",
+            "cart-line-0-1"
           ]
         },
         {

@@ -12,6 +12,10 @@
         "maple-ridge-comfort-150"
       ],
       "ranked": true,
+      "refinement": {
+        "sort": "relevance",
+        "filters": {}
+      },
       "products": [
         {
           "id": "aurora-hush-pro",
@@ -48,6 +52,36 @@
         "type": "add_to_cart",
         "label": "Add to cart",
         "payload": {}
+      },
+      {
+        "type": "refine",
+        "label": "Top rated",
+        "payload": { "sort": "rating" }
+      },
+      {
+        "type": "refine",
+        "label": "Price: low to high",
+        "payload": { "sort": "price_asc" }
+      },
+      {
+        "type": "refine",
+        "label": "Price: high to low",
+        "payload": { "sort": "price_desc" }
+      },
+      {
+        "type": "refine",
+        "label": "ANC only",
+        "payload": { "ancOnly": true }
+      },
+      {
+        "type": "refine",
+        "label": "40h+ battery",
+        "payload": { "minBatteryHours": 40 }
+      },
+      {
+        "type": "refine",
+        "label": "Under $150",
+        "payload": { "maxPriceUsd": 150 }
       }
     ]
   }

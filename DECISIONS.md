@@ -167,6 +167,34 @@ one transcript conversation.
     bind `productId` to the row item's `id`, mirroring the native stamping).
   - One surface per turn (`surfaceId = sessionId-turnId`); the bounded cart
     amendment (D2 amendment) projects to `deleteSurface` + recreate.
+- **D11 — Registry expansion v1.1 (owner-directed interactivity).** The
+  MVP-6 registry grows additively; `planVersion` stays `"1"` and the frozen
+  rules stand (closed vocabulary, lockstep on both sides, fixture corpus as
+  the source of truth — updated in place, goldens regenerated).
+  - `product_grid` + refinement bar: optional `refinement` state and up to 8
+    `refine` actions, one per chip, each with its complete FLAT target
+    payload (`sort` / `ancOnly` / `minBatteryHours` / `maxPriceUsd` at the
+    top level — flat because A2UI event contexts accept only scalars, and
+    both renderers must post identical payloads). Strict coupling: state ⇔
+    chips. Tapping re-runs search + ranking server-side; the fresh grid
+    echoes the applied state.
+  - `cart_view` + quantity steppers: `set_quantity` (payload `productId` +
+    integer `quantity` 1–10); emitters ship only in-bounds steps; the
+    existing `app.tools.cart.set_quantity` finally gets a wire surface.
+  - New `multi_picker` component: 2–6 options, `maxSelect` 1–3, exactly one
+    `select_preferences` action. Its `values` is the second sanctioned
+    client-stamping exception (after the grid's `withProduct`): the wire
+    template ships `values: []`, the renderer fills it from user checks,
+    and validation requires filled values ⊆ options within `maxSelect`.
+  - Flow change (D4 amendment): when the category is known but NO priorities
+    were stated and nothing was asked yet this conversation, the clarify
+    gate asks the multi_picker ONCE ("what matters most?") instead of
+    silently proceeding with balanced weights. The never-ask-twice rule is
+    unchanged (`asked_clarification` guards it).
+  - `refine` and `select_preferences` are chip fast-paths (D4 pattern):
+    validated in `intent_node` before any model call, merged into intent
+    deterministically, `followup=None`, and the normal proceed pipeline
+    re-runs — no intent re-parse, one weights call per turn as today.
 
 ## Amendments (2026-08-30 — owner-directed Phase 2 polish)
 
