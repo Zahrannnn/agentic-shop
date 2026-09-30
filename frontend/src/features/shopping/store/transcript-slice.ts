@@ -54,6 +54,12 @@ export type Turn = {
   planState: PlanState;
   /** Validated A2UI message stream for this turn's surface (D10), if any. */
   blueprint: unknown[] | null;
+  /**
+   * True when this turn is the ANCHORED cart region (D2 amendment / D12):
+   * amendments keep landing here regardless of the plan's mutable turnId —
+   * the stable identity the optimistic cart patches reconcile against.
+   */
+  cartAnchor?: boolean;
   terminal: TerminalOutcome | null;
 };
 
@@ -69,6 +75,28 @@ const initialState: TranscriptState = {
 
 function currentTurn(state: TranscriptState): Turn | undefined {
   return state.turns[state.turns.length - 1];
+}
+
+/** Structural view of the anchored cart plan (validation happened upstream). */
+type CartViewPlanLike = { root: { type: string; props: unknown } };
+
+const round2 = (value: number): number => Math.round(value * 100) / 100;
+
+/**
+ * The anchored cart turn: the turn flagged as the stable cart region, or —
+ * before the first amendment flag exists — the latest rendered cart_view.
+ */
+function findCartAnchor(state: TranscriptState): Turn | undefined {
+  return (
+    state.turns.find((turn) => turn.cartAnchor === true) ??
+    [...state.turns]
+      .reverse()
+      .find(
+        (turn) =>
+          turn.planState === "rendered" &&
+          (turn.plan as CartViewPlanLike | null)?.root?.type === "cart_view",
+      )
+  );
 }
 
 /**
@@ -173,16 +201,21 @@ export const transcriptSlice = createSlice({
         return;
       }
       const { amendsTurnId, plan } = action.payload;
+      // The anchor is remembered by a stable flag (D12 fix): the first
+      // amendment replaces the anchor's plan with one carrying a NEW turnId,
+      // so a turnId-only lookup would miss from the second amendment on.
       const anchor = state.turns.find(
         (turn) =>
+          turn.cartAnchor === true ||
           (turn.plan as { turnId?: number } | null | undefined)?.turnId ===
-          amendsTurnId,
+            amendsTurnId,
       );
       if (!anchor) {
         current.plan = plan;
         current.planState = "rendered";
         return;
       }
+      anchor.cartAnchor = true;
       anchor.plan = plan;
       anchor.planState = "rendered";
     },
@@ -233,12 +266,60 @@ export const transcriptSlice = createSlice({
       const { amendsTurnId, messages } = action.payload;
       const anchor = state.turns.find(
         (turn) =>
+          turn.cartAnchor === true ||
           (turn.plan as { turnId?: number } | null | undefined)?.turnId ===
-          amendsTurnId,
+            amendsTurnId,
       );
       if (anchor) {
         anchor.blueprint = messages;
       }
+    },
+    /**
+     * Optimistic cart quantity (D12): applied in the same frame as the tap,
+     * BEFORE the PATCH persists it. Finds the anchored cart turn and sets the
+     * line's quantity, recomputing the total from the plan's per-line
+     * `unitPriceUsd`. A no-op when there is no rendered cart to patch (the
+     * reconciling response, success or revert, always carries server truth).
+     */
+    cartQuantityPatched: (
+      state,
+      action: PayloadAction<{ productId: string; quantity: number }>,
+    ) => {
+      const anchor = findCartAnchor(state);
+      if (!anchor) {
+        return;
+      }
+      const props = (anchor.plan as CartViewPlanLike)["root"]["props"] as {
+        items: Array<{ productId: string; quantity: number; unitPriceUsd: number }>;
+        totalUsd: number;
+      };
+      const line = props.items.find((item) => item.productId === action.payload.productId);
+      if (!line) {
+        return;
+      }
+      line.quantity = action.payload.quantity;
+      props.totalUsd = round2(
+        props.items.reduce((sum, item) => sum + item.unitPriceUsd * item.quantity, 0),
+      );
+    },
+    /**
+     * Server truth after a successful PATCH (D12): swap the anchored cart
+     * region for the authoritative re-rendered plan (+ A2UI projection) and
+     * mark the turn as the stable anchor. `blueprint` replaces whatever was
+     * there — the projection is the server's own re-render.
+     */
+    cartReconciled: (
+      state,
+      action: PayloadAction<{ plan: unknown; messages: unknown[] | null }>,
+    ) => {
+      const anchor = findCartAnchor(state);
+      if (!anchor) {
+        return;
+      }
+      anchor.cartAnchor = true;
+      anchor.plan = action.payload.plan;
+      anchor.planState = "rendered";
+      anchor.blueprint = action.payload.messages;
     },
     /** `turn_end` terminator: unlock the input (phase → "idle"). */
     turnEnded: (state) => {
@@ -288,6 +369,8 @@ export const {
   planAmended,
   blueprintReceived,
   blueprintAmended,
+  cartQuantityPatched,
+  cartReconciled,
   planInvalid,
   turnEnded,
   turnFailed,

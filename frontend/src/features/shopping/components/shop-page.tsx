@@ -84,9 +84,13 @@ function hasRehydratedSession(): boolean {
 }
 
 export function ShopPage() {
-  const { turns, phase, isBusy, sessionId, send, startFresh } = useAgentTurn();
+  const { turns, phase, isBusy, sessionId, send, startFresh, patchQuantity } =
+    useAgentTurn();
   const [expiredNotice, setExpiredNotice] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
+  // D12: a failed direct cart patch reverted optimistically — surface it
+  // once, clear on the next success.
+  const [cartPatchFailed, setCartPatchFailed] = useState(false);
   // D10 side-by-side: which stack renders plan regions. Ephemeral UI state by
   // frontend/AGENTS.md (RTK is for durable state) — default native.
   const [rendererKind, setRendererKind] = useState<"native" | "a2ui">("native");
@@ -136,6 +140,17 @@ export function ShopPage() {
       void submit({ uiAction: action });
     },
     [submit],
+  );
+
+  // D12 widget path: steppers patch directly (optimistic, no transcript
+  // turn). A failure reverts optimistically and surfaces the notice.
+  const handleQuantityPatch = useCallback(
+    (productId: string, quantity: number) => {
+      void patchQuantity(productId, quantity).then((persisted) => {
+        setCartPatchFailed(!persisted);
+      });
+    },
+    [patchQuantity],
   );
 
   // Catalog sheet → chat: closes the sheet and reuses the same submit path
@@ -231,6 +246,7 @@ export function ShopPage() {
                     isLatest={index === turns.length - 1}
                     isStreaming={streaming && index === turns.length - 1}
                     onAction={handleAction}
+                    onQuantityPatch={handleQuantityPatch}
                     rendererKind={rendererKind}
                   />
                 </li>
@@ -280,6 +296,16 @@ export function ShopPage() {
           ) : null}
 
           <TurnComposer onSend={handleSendText} isBusy={isBusy} />
+
+          {cartPatchFailed ? (
+            <p
+              role="status"
+              data-testid="cart-patch-error"
+              className="mb-3 rounded-lg border bg-secondary px-4 py-3 text-sm leading-[1.6] text-muted-foreground"
+            >
+              Couldn&apos;t save that quantity change — the cart was restored. Try again.
+            </p>
+          ) : null}
 
           <div className="mt-3 flex items-center justify-between gap-3">
             <p className="truncate text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">

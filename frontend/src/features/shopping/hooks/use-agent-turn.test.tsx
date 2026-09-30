@@ -91,7 +91,7 @@ const AMENDED_CART_PLAN = {
   root: {
     type: "cart_view",
     props: {
-      items: [{ productId: "aurora-hush-pro", quantity: 1 }],
+      items: [{ productId: "aurora-hush-pro", quantity: 1, unitPriceUsd: 179 }],
       totalUsd: 179,
     },
     actions: [
@@ -446,5 +446,173 @@ describe("useAgentTurn", () => {
     expect(result.current.phase).toBe("idle");
     expect(result.current.sessionId).not.toBe(sessionIdBefore);
     expect(store.getState().agentTranscript.turns).toHaveLength(0);
+  });
+});
+
+describe("patchQuantity — direct cart mutation (D12)", () => {
+  const fetchMock = vi.fn<(url: unknown, init?: unknown) => Promise<Response>>();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+    window.sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function renderTurnHook() {
+    const store = createTestStore();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <Provider store={store}>{children}</Provider>
+    );
+    const rendered = renderHook(() => useAgentTurn(), { wrapper });
+    return { ...rendered, store };
+  }
+
+  const CART_PLAN = {
+    planVersion: "1",
+    sessionId: "demo-12345",
+    turnId: 1,
+    root: {
+      type: "cart_view",
+      props: {
+        items: [{ productId: "aurora-hush-pro", quantity: 1, unitPriceUsd: 179 }],
+        totalUsd: 179,
+      },
+      actions: [
+        {
+          type: "set_quantity",
+          label: "+",
+          payload: { productId: "aurora-hush-pro", quantity: 2 },
+        },
+      ],
+    },
+  };
+
+  async function seedCartTurn(rendered: {
+    result: { current: ReturnType<typeof useAgentTurn> };
+    store: ReturnType<typeof createTestStore>;
+  }) {
+    fetchMock.mockResolvedValueOnce(
+      sseResponse([
+        frame("message_delta", { text: "Added." }),
+        frame("ui_update", CART_PLAN),
+        frame("turn_end", {}),
+      ]),
+    );
+    await act(async () => {
+      await rendered.result.current.send({ message: "add the first one" });
+    });
+    expect(
+      rendered.store.getState().agentTranscript.turns[0].planState,
+    ).toBe("rendered");
+  }
+
+  it("patches optimistically, persists, and reconciles from the server render", async () => {
+    const { result, store } = renderTurnHook();
+    await seedCartTurn({ result, store });
+
+    const patchedPlan = {
+      ...CART_PLAN,
+      turnId: 2,
+      root: {
+        ...CART_PLAN.root,
+        props: {
+          items: [
+            { productId: "aurora-hush-pro", quantity: 3, unitPriceUsd: 179 },
+          ],
+          totalUsd: 537,
+        },
+      },
+    };
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, {
+        items: [{ productId: "aurora-hush-pro", quantity: 3, unitPriceUsd: 179 }],
+        totalUsd: 537,
+        plan: patchedPlan,
+        a2ui: { messages: [{ version: "v0.9" }] },
+      }),
+    );
+
+    let persisted: boolean | undefined;
+    await act(async () => {
+      persisted = await result.current.patchQuantity("aurora-hush-pro", 3);
+    });
+
+    expect(persisted).toBe(true);
+    const turn = currentTurn(store.getState().agentTranscript.turns);
+    expect(turn.cartAnchor).toBe(true);
+    // The region was swapped for the server's authoritative re-render.
+    expect((turn.plan as typeof patchedPlan).root.props.items[0].quantity).toBe(3);
+    expect((turn.plan as typeof patchedPlan).root.props.totalUsd).toBe(537);
+    expect(turn.blueprint).toEqual([{ version: "v0.9" }]);
+
+    // The PATCH went out with the exact body — and no transcript turn was
+    // created for it (widget taps are not conversation).
+    const patchCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as { method?: string })?.method === "PATCH",
+    );
+    expect(patchCall).toBeDefined();
+    expect(JSON.parse((patchCall?.[1] as { body: string }).body)).toEqual({
+      session_id: result.current.sessionId,
+      product_id: "aurora-hush-pro",
+      quantity: 3,
+    });
+    expect(store.getState().agentTranscript.turns).toHaveLength(1);
+    expect(store.getState().agentTranscript.phase).toBe("idle");
+  });
+
+  it("applies the optimistic quantity before the patch resolves", async () => {
+    const { result, store } = renderTurnHook();
+    await seedCartTurn({ result, store });
+
+    // The PATCH promise is held: the optimistic value must already be visible.
+    let resolvePatch: (response: Response) => void = () => {};
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolvePatch = resolve;
+        }),
+    );
+    let done: Promise<boolean> | undefined;
+    act(() => {
+      done = result.current.patchQuantity("aurora-hush-pro", 3);
+    });
+
+    const turn = currentTurn(store.getState().agentTranscript.turns);
+    const props = (turn.plan as typeof CART_PLAN).root.props;
+    expect(props.items[0].quantity).toBe(3);
+    expect(props.totalUsd).toBe(537); // 3 × 179, recomputed from the unit price
+
+    await act(async () => {
+      resolvePatch(
+        jsonResponse(200, {
+          items: [],
+          totalUsd: 537,
+          plan: CART_PLAN,
+          a2ui: { messages: [] },
+        }),
+      );
+      await done;
+    });
+  });
+
+  it("reverts the optimistic quantity when the patch fails", async () => {
+    const { result, store } = renderTurnHook();
+    await seedCartTurn({ result, store });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(500, { detail: "boom" }));
+    let persisted: boolean | undefined;
+    await act(async () => {
+      persisted = await result.current.patchQuantity("aurora-hush-pro", 4);
+    });
+
+    expect(persisted).toBe(false);
+    const turn = currentTurn(store.getState().agentTranscript.turns);
+    const props = (turn.plan as typeof CART_PLAN).root.props;
+    expect(props.items[0].quantity).toBe(1);
+    expect(props.totalUsd).toBe(179);
   });
 });

@@ -147,6 +147,11 @@ export type TranscriptTurnProps = {
   isStreaming: boolean;
   onAction: (action: PlanAction) => void;
   /**
+   * D12 widget path: when present, quantity steppers patch directly
+   * (optimistic, no transcript turn) instead of posting the action.
+   */
+  onQuantityPatch?: (productId: string, quantity: number) => void;
+  /**
    * Which stack renders the plan region (D10 side-by-side): the native
    * registry (default) or the A2UI projection when the turn has one. A turn
    * without a blueprint falls back to native with a small notice.
@@ -159,6 +164,7 @@ export function TranscriptTurn({
   isLatest,
   isStreaming,
   onAction,
+  onQuantityPatch,
   rendererKind = "native",
 }: TranscriptTurnProps) {
   const working = isStreaming && turn.terminal === null;
@@ -170,6 +176,21 @@ export function TranscriptTurn({
       : turn.planState === "invalid"
         ? "This plan failed validation."
         : null;
+
+  // D12 widget interception: quantity steppers patch directly (optimistic,
+  // no transcript turn) when the shell provides the path; everything else —
+  // and every fallback without the path — posts verbatim.
+  const handleActionWithPatch = (action: PlanAction): void => {
+    if (onQuantityPatch && action.type === "set_quantity") {
+      const productId = action.payload.productId;
+      const quantity = action.payload.quantity;
+      if (typeof productId === "string" && typeof quantity === "number") {
+        onQuantityPatch(productId, quantity);
+        return;
+      }
+    }
+    onAction(action);
+  };
 
   return (
     <article data-testid="transcript-turn" className="animate-turn-in space-y-4">
@@ -220,7 +241,7 @@ export function TranscriptTurn({
           rendererKind === "a2ui" && turn.blueprint !== null ? (
             <A2uiRenderer
               messages={turn.blueprint as A2uiMessage[]}
-              onAction={onAction}
+              onAction={handleActionWithPatch}
             />
           ) : rendererKind === "a2ui" ? (
             <div className="max-w-prose space-y-2">
@@ -230,10 +251,16 @@ export function TranscriptTurn({
               >
                 No A2UI payload for this turn — native render
               </p>
-              <PlanRenderer plan={turn.plan as UiPlan} onAction={onAction} />
+              <PlanRenderer
+                plan={turn.plan as UiPlan}
+                onAction={handleActionWithPatch}
+              />
             </div>
           ) : (
-            <PlanRenderer plan={turn.plan as UiPlan} onAction={onAction} />
+            <PlanRenderer
+              plan={turn.plan as UiPlan}
+              onAction={handleActionWithPatch}
+            />
           )
         ) : null}
 
