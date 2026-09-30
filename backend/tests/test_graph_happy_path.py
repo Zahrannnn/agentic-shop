@@ -135,10 +135,15 @@ def test_plan_validates_against_dsl_and_catalog() -> None:
     props = plan.root.props
     assert props.ranked is True
     assert props.product_ids == EXPECTED_TOP3
+    # D11: the grid always carries its refinement state and the chip table
+    # (3 card/sort-level actions + 6 refine chips in the default state).
+    assert props.refinement is not None
+    assert props.refinement.sort == "relevance"
     assert [action.type for action in plan.root.actions] == [
         "compare",
         "details",
         "add_to_cart",
+        *["refine"] * 6,
     ]
 
 
@@ -161,7 +166,11 @@ def test_turn_id_is_monotonic_across_turns() -> None:
 
 
 def test_empty_results_relax_budget_and_disclose_assumption() -> None:
-    state, _config = _run_graph("graph-relax-01", "I need headphones under $10.")
+    # A stated priority keeps the D11 priorities ask out of the way — this
+    # test is about the relaxation edge case, not the gate.
+    state, _config = _run_graph(
+        "graph-relax-01", "I need headphones under $10 with great noise cancellation."
+    )
     assert state["candidates"], "relaxation must yield closest matches"
     assumptions = state["intent"]["assumptions"]
     assert any("relaxed the price cap" in item for item in assumptions)
@@ -574,7 +583,9 @@ async def test_us4_add_view_remove_cart_round_trip() -> None:
         "totalUsd": top.price_usd,
     }
     assert [(a.type, a.payload) for a in plan2.root.actions] == [
-        ("remove_from_cart", {"productId": EXPECTED_TOP3[0]})
+        ("remove_from_cart", {"productId": EXPECTED_TOP3[0]}),
+        # D11 steppers: quantity 1 ships only the "+" step (in-bounds only).
+        ("set_quantity", {"productId": EXPECTED_TOP3[0], "quantity": 2}),
     ]
     text2 = "".join(d["text"] for k, d in _events if k == "message_delta")
     assert text2 == f"Added {top.name} to your cart."

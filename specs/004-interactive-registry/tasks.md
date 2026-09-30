@@ -33,25 +33,32 @@ green per PR. Stacked branches: contract → behavior → polish.
 - [x] C05 Docs: DECISIONS.md D11; ui-dsl.md registry/rules/fixture table;
       FRONTEND_GUIDE §5 table. Both gates green.
 
-## PR 2 — Backend behavior
+## PR 2 — Backend behavior — COMPLETE
 
-- [ ] B01 `intent_node` fast-paths: `_refine_params` (flat payload → intent
-      keys: sort, anc_only, refine-max-price; battery filter reuses
-      `min_battery_hours`) and select_preferences → canonical priorities at
-      salience 1.0; both skip the LLM intent call and set `followup=None`.
-- [ ] B02 Search + ranking plumbing: `anc_only` + refine-max-price filters
-      (combined with budget as the tighter cap); pure post-scoring `sort`
-      with `(key, product_id)` tiebreaks; grid emission always carries
-      `refinement` (echoing applied state) + chips.
-- [ ] B03 D4 amendment: `clarify_gate` routes to `ui_agent_ask_priorities`
-      (multi_picker over the five attributes) when category known ∧ no
-      priorities ∧ `asked_clarification` false; never twice.
-- [ ] B04 `set_quantity` followup kind (resolver + `_build_followup_plan` +
-      narration) reusing the cart tools and the amendment anchor; steppers
-      emitted per cart line (clamped, ≤ 3 lines).
-- [ ] B05 Tests: refine loop (re-rank, no intent call, echoed state),
-      select_preferences re-rank, priorities-ask gate table, stepper
-      amendment; update exact-action assertions. Backend gates green.
+- [x] B01 `intent_node` fast-paths: `_refine_params` (flat payload, TARGET
+      semantics — absent keys reset, making Clear truthful) and
+      `_select_preferences_priorities` (canonical priorities at salience
+      1.0); both skip the LLM intent call and set `followup=None`.
+- [x] B02 Search + ranking plumbing: `anc_only` → `require_anc`;
+      refine-max-price tightens (never loosens) the budget cap; pure
+      post-scoring `_apply_sort` with product-id tiebreaks; the grid always
+      carries `refinement` (echoing applied state) + the chip table
+      (fixed targets 40h/$150, active chip omitted, Clear chip when
+      deviated, ≤ 8).
+- [x] B03 D4 amendment: `clarify_gate` routes to `ui_agent_ask_priorities`
+      (multi_picker over the five attribute labels) when category known ∧
+      no priorities ∧ no followup ∧ `asked_clarification` false — never
+      twice; builder gains the node + edge.
+- [x] B04 `set_quantity` followup kind (resolver carries the clamped
+      quantity; `_build_followup_plan` applies `app.tools.cart.set_quantity`;
+      narration "Quantity for X set to N."); steppers emitted per cart line
+      (− at >1, + at <10, ≤ 3 lines).
+- [x] B05 Tests: new `tests/test_registry_v11.py` (ask once → answer
+      re-ranks → never twice; skip with stated priorities and on
+      follow-ups; sort chip re-orders + echoes + Clear appears; filter chip
+      + clear; chip turn makes exactly one model call — no intent; stepper
+      +/− bounds and amendment) + gate-table and exact-action updates.
+      Backend gates green (302 tests).
 
 ## PR 3 — Interactive polish + A2UI demo
 

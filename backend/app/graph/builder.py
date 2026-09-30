@@ -1,8 +1,10 @@
-"""Graph assembly: the fixed 7-node backbone (DECISIONS.md D6, research R3).
+"""Graph assembly: the fixed backbone (DECISIONS.md D6 + D11, research R3).
 
 ::
 
     START → intent → clarify_gate ──(ask)───────→ ui_agent_ask ──→ END   (US2)
+                        │
+                        ├──(ask_priorities)──→ ui_agent_ask_priorities → END (D11)
                         │
                         ├────────(disclose)─────→ ui_plan ──→ respond → END  (US4)
                         │
@@ -10,12 +12,14 @@
 
 ``clarify_gate`` is the only conditional edge. Its router
 (:func:`app.graph.nodes.clarify_decision`) implements the R7 rule table:
-unknown/missing category asks exactly once (the ask turn ends the turn), and
-``asked_clarification`` forces every later turn to proceed. A US4 follow-up
-whose targets cannot be resolved routes straight to ``ui_plan`` for the clean
-deterministic disclosure — the intermediate nodes are skipped so their
-budget/category defaults never record spurious assumptions into the session
-intent. Resolvable follow-ups ride the normal proceed pipeline.
+unknown/missing category asks exactly once (the ask turn ends the turn), the
+D11 priorities ask fires once when the category is known but no priorities
+were stated, and ``asked_clarification`` forces every later turn to proceed
+(never ask twice in a row). A US4 follow-up whose targets cannot be resolved
+routes straight to ``ui_plan`` for the clean deterministic disclosure — the
+intermediate nodes are skipped so their budget/category defaults never record
+spurious assumptions into the session intent. Resolvable follow-ups ride the
+normal proceed pipeline.
 
 The compiled graph uses ``MemorySaver`` keyed on ``thread_id`` = session id
 (in-memory by design; a restart means fresh sessions). ``get_graph`` caches
@@ -37,6 +41,7 @@ from app.graph.nodes import (
     respond_node,
     search_node,
     ui_agent_ask,
+    ui_agent_ask_priorities,
     ui_plan_node,
 )
 from app.graph.state import ShoppingState
@@ -50,6 +55,7 @@ def build_graph() -> CompiledStateGraph:
     graph.add_node("intent", intent_node)
     graph.add_node("clarify_gate", clarify_gate)
     graph.add_node("ui_agent_ask", ui_agent_ask)
+    graph.add_node("ui_agent_ask_priorities", ui_agent_ask_priorities)
     graph.add_node("search", search_node)
     graph.add_node("research", research_node)
     graph.add_node("recommend", recommend_node)
@@ -61,9 +67,15 @@ def build_graph() -> CompiledStateGraph:
     graph.add_conditional_edges(
         "clarify_gate",
         clarify_decision,
-        {"ask": "ui_agent_ask", "disclose": "ui_plan", "proceed": "search"},
+        {
+            "ask": "ui_agent_ask",
+            "ask_priorities": "ui_agent_ask_priorities",
+            "disclose": "ui_plan",
+            "proceed": "search",
+        },
     )
     graph.add_edge("ui_agent_ask", END)
+    graph.add_edge("ui_agent_ask_priorities", END)
     graph.add_edge("search", "research")
     graph.add_edge("research", "recommend")
     graph.add_edge("recommend", "ui_plan")

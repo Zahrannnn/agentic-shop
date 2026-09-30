@@ -53,16 +53,34 @@ def _invoke(session_id: str, message: str):
         ({"intent": {}}, "ask"),  # intent present, category missing
         ({"intent": {"category": None}}, "ask"),
         ({"intent": {"category": "laptops"}}, "ask"),  # not a catalog category
-        ({"intent": {"category": "headphones"}}, "proceed"),  # known category
-        ({"intent": {"category": "Headphones"}}, "proceed"),  # case-insensitive
-        ({"intent": {"category": "  HEADPHONES "}}, "proceed"),  # whitespace + case
-        # Rule 1 outranks rule 2: never ask twice in a row.
+        # D11 rule 4: known category but NO priorities → the multi_picker ask.
+        ({"intent": {"category": "headphones"}}, "ask_priorities"),
+        ({"intent": {"category": "Headphones"}}, "ask_priorities"),  # case-insensitive
+        ({"intent": {"category": "  HEADPHONES "}}, "ask_priorities"),  # whitespace + case
+        ({"intent": {"category": "headphones", "priorities": {"anc": 1.0}}}, "proceed"),
+        ({"intent": {"category": "headphones", "priorities": {"anc": 0.0}}}, "ask_priorities"),
+        # A resolvable follow-up never triggers the interrogation.
+        ({"intent": {"category": "headphones"}, "followup": {"kind": "details"}}, "proceed"),
+        # Rule 2 outranks rule 4: never ask twice in a row.
         ({"asked_clarification": True}, "proceed"),
         ({"asked_clarification": True, "intent": {"category": "laptops"}}, "proceed"),
         ({"asked_clarification": True, "intent": {}}, "proceed"),
         # Budget/contradiction states never ask (R7: don't ask about budget).
-        ({"intent": {"category": "headphones", "budget_usd": None}}, "proceed"),
-        ({"intent": {"category": "headphones", "flag_contradiction": True}}, "proceed"),
+        ({"intent": {"category": "headphones", "budget_usd": None}}, "ask_priorities"),
+        (
+            {
+                "intent": {
+                    "category": "headphones",
+                    "priorities": {"comfort": 1.0},
+                    "budget_usd": None,
+                }
+            },
+            "proceed",
+        ),
+        (
+            {"intent": {"category": "headphones", "flag_contradiction": True}},
+            "ask_priorities",
+        ),
     ],
 )
 def test_clarify_decision_rule_table(state: dict, expected: str) -> None:
@@ -77,11 +95,15 @@ def test_clarify_decision_is_pure() -> None:
 
 
 def test_rule_table_tracks_the_real_catalog_categories() -> None:
-    """A category is 'known' exactly when the loaded catalog carries it."""
+    """A category is 'known' exactly when the loaded catalog carries it.
+
+    The probe state states a priority so the D11 priorities ask doesn't
+    fire — this table is about the category rule, not the bar."""
     catalog_categories = {product.category.lower() for product in load_catalog()}
     assert catalog_categories  # sanity: the catalog is non-empty
     for category in catalog_categories:
-        assert clarify_decision({"intent": {"category": category.upper()}}) == "proceed"
+        state = {"intent": {"category": category.upper(), "priorities": {"anc": 1.0}}}
+        assert clarify_decision(state) == "proceed"
     assert clarify_decision({"intent": {"category": "televisions"}}) == "ask"
 
 
