@@ -126,6 +126,31 @@ one transcript conversation.
 4. Zod ↔ Pydantic contract: single source of truth = `fixtures/ui-plans/` +
    contract tests on both sides
 
+## Amendments (2026-09-29 — owner-directed practice: Jev judgment layer + A2UI projection)
+
+- **D9 — Judgment layer: TypeSafe Jev for intent extraction.** The intent
+  node's LLM structured-output call becomes swappable: `JEV_MODE=off`
+  (default) keeps the D8 LLM path byte-identical; `JEV_MODE=mock|real` runs
+  intent as ONE batched Jev judgment (TypeSafe "System One": typed questions
+  — category Choice over catalog categories, per-attribute Score rubrics —
+  answered with calibrated probabilities, docs.typeSafe.ai). Rules:
+  - Jev access only through the `app/llm/jev.py` factory (constitution II:
+    env-driven key/model, `mock` mode keyless, `real` fail-fast without key),
+    mirroring `app/llm/client.py` including its retry-once-then-typed-error
+    shape (`JevError` → one `error` SSE frame, code `jev`).
+  - Determinism preserved: a category choice below `CATEGORY_CONFIDENCE_FLOOR`
+    is treated as unclear (the deterministic clarify gate asks); budget comes
+    from the dollar regex, never the model; ranking (D3) is untouched; the
+    mock derives answers from the same `app/llm/intent_rules` baseline as the
+    LLM mock, so `JEV_MODE=mock` produces identical wire output to the LLM
+    path (pinned by test).
+  - `use_case` is not produced by the Jev path (typed decisions, not free
+    text; it has no downstream consumers).
+  - Chip and follow-up fast paths (D4/D6) skip the judgment layer exactly as
+    they skip the LLM.
+- **Deferred Jev targets:** clarify-gate decisions (would amend D4),
+  follow-up semantic disambiguation, retry-guardrail judgments.
+
 ## Amendments (2026-08-30 — owner-directed Phase 2 polish)
 
 - **D2 amendment — bounded plan amendment (V2 first slice).** Full

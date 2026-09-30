@@ -52,6 +52,7 @@ from app.config import get_settings
 from app.graph.builder import get_graph
 from app.graph.nodes import get_catalog
 from app.llm.client import StructuredOutputError
+from app.llm.jev import JevError
 
 router = APIRouter()
 
@@ -68,6 +69,7 @@ _live_sessions: set[str] = set()
 _live_sessions_lock = _in_flight_lock  # same critical section guards both sets
 
 _STRUCTURED_OUTPUT_ERROR_MESSAGE = "The model returned an invalid response twice. Please try again."
+_JEV_ERROR_MESSAGE = "The judgment service failed. Please try again."
 _INTERNAL_ERROR_MESSAGE = "Something went wrong on our side. Please try again."
 
 
@@ -216,7 +218,8 @@ async def sse_generator(
 
     Terminal-frame invariant: exactly one of ``turn_end`` / ``error`` ends the
     stream. A node-emitted ``error`` payload or a raised
-    :class:`StructuredOutputError` suppresses ``turn_end``.
+    :class:`StructuredOutputError` / :class:`~app.llm.jev.JevError` suppresses
+    ``turn_end``.
     """
     errored = False
     # D7 contract order: statuses -> message_delta -> ui_update -> turn_end.
@@ -242,6 +245,9 @@ async def sse_generator(
                     deferred_ui_frame = frame
                     continue
                 yield frame
+        except JevError:
+            errored = True
+            yield ErrorEvent(message=_JEV_ERROR_MESSAGE, code="jev").to_frame().frame()
         except StructuredOutputError:
             errored = True
             yield (

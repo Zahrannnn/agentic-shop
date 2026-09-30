@@ -107,6 +107,7 @@ event: error         data: {"message":"The model returned an invalid
 ```
 
 Error codes: `structured_output` (D8 wrapper exhausted its retry),
+`jev` (D9 judgment layer exhausted its retry — only when `JEV_MODE=real`),
 `busy` (mirrors 409 if raced), `unknown_session`, `internal` (unexpected;
 message is safe for display, never raw model output or stack traces).
 

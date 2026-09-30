@@ -16,7 +16,10 @@ Node contract
   ``app.api.routes`` translates them 1:1 into SSE frames (research R3).
 * Every LLM call goes through ``call_structured`` (D8: validate → retry once →
   typed failure) with the sentinel-wrapped context block described in
-  :func:`_llm_messages`, keeping mock-mode behavior deterministic.
+  :func:`_llm_messages`, keeping mock-mode behavior deterministic. When
+  ``JEV_MODE`` is ``mock``/``real`` the intent call instead runs as one
+  batched Jev judgment through ``app.llm.jev`` (D9) — same resilience shape,
+  same deterministic mock baseline.
 * No prints, no clock, no randomness: identical inputs produce identical
   emissions (principle III).
 
@@ -76,6 +79,7 @@ from app.graph.followups import (
 from app.graph.schemas import IntentExtraction, Narration, PreferenceWeights
 from app.graph.state import ShoppingState
 from app.llm.client import CONTEXT_CLOSE, CONTEXT_OPEN, call_structured, get_llm
+from app.llm.jev import jev_ask_intent
 from app.ranking.scorer import SCORABLE_ATTRIBUTES, ScoredProduct, score_products
 from app.tools.cart import add_to_cart, get_cart, remove_from_cart
 from app.tools.research import summarize_candidates
@@ -424,6 +428,23 @@ def _chip_category(action: Any) -> str | None:
     return cleaned
 
 
+def _jev_intent_extraction(text: str) -> IntentExtraction:
+    """One batched Jev judgment mapped onto ``IntentExtraction`` (D9).
+
+    ``use_case`` stays ``None`` — Jev produces typed decisions, not free text,
+    and no downstream node consumes the use case. Budget comes from the
+    deterministic dollar regex inside the judgment layer, never the model.
+    """
+    categories = sorted({product.category for product in get_catalog()})
+    answers = jev_ask_intent(text, categories)
+    return IntentExtraction(
+        category=answers.category,
+        budget_usd=answers.budget_usd,
+        use_case=None,
+        priorities=answers.priorities,
+    )
+
+
 def intent_node(state: ShoppingState) -> dict[str, Any]:
     """Parse the pending user text into intent and append it to the transcript.
 
@@ -436,7 +457,10 @@ def intent_node(state: ShoppingState) -> dict[str, Any]:
       positional/demonstrative phrase) — the turn is fully determined by
       session state, so the LLM intent call is skipped here too, keeping
       follow-up resolution model-free and deterministic;
-    * otherwise the structured intent call runs as usual.
+    * otherwise the structured intent call runs as usual — via the LLM
+      factory (``JEV_MODE=off``, the default) or as one batched Jev
+      judgment (``JEV_MODE=mock|real``, D9); both paths produce an
+      ``IntentExtraction`` and everything downstream is identical.
 
     Either way, the rule-based attribute constraints (battery hours, codecs)
     are parsed from the raw text and merged; they are hard search filters the
@@ -454,11 +478,14 @@ def intent_node(state: ShoppingState) -> dict[str, Any]:
     elif followup is not None:
         intent = _merge_intent(state.get("intent", {}), IntentExtraction())
     else:
-        extraction = call_structured(
-            get_llm(),
-            IntentExtraction,
-            _llm_messages(_INTENT_SYSTEM_PROMPT, text, {"task": "intent"}),
-        )
+        if get_settings().jev_enabled:
+            extraction = _jev_intent_extraction(text)
+        else:
+            extraction = call_structured(
+                get_llm(),
+                IntentExtraction,
+                _llm_messages(_INTENT_SYSTEM_PROMPT, text, {"task": "intent"}),
+            )
         intent = _merge_intent(state.get("intent", {}), extraction)
     for key, value in _extract_attribute_constraints(text).items():
         intent[key] = value

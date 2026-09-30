@@ -12,13 +12,13 @@ dependencies = [
     "langchain-openai>=0.2",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
+    "httpx>=0.28.1",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
-    "httpx>=0.27",
     "ruff>=0.6",
 ]
 
@@ -40,4 +40,7 @@ select = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-q"
+addopts = "-q -m 'not jev_real'"
+markers = [
+    "jev_real: hits the real TypeSafe Jev API; opt in explicitly with -m jev_real",
+]
