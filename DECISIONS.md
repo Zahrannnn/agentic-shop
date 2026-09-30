@@ -195,6 +195,25 @@ one transcript conversation.
     validated in `intent_node` before any model call, merged into intent
     deterministically, `followup=None`, and the normal proceed pipeline
     re-runs — no intent re-parse, one weights call per turn as today.
+- **D12 — Direct cart mutation: `PATCH /api/cart` (optimistic widget path).**
+  Quantity-stepper taps bypass the conversation entirely: the client updates
+  its cart region instantly (optimistic, from the plan's per-line
+  `unitPriceUsd`), persists via `PATCH /api/cart`, and reconciles against the
+  authoritative re-render (plan + A2UI projection) the endpoint returns.
+  - The endpoint mutates the LangGraph checkpoint directly
+    (`get_state`/`update_state`, `as_node="ui_plan"`) — no streamed turn, no
+    model call, no input lock. Guards: 404 `unknown_session` /
+    `unknown_cart_line`, 409 `turn_in_flight` (read-only check; a PATCH
+    never registers itself as in-flight).
+  - FR-009 exception (documented): the cart widget's `set_quantity` taps go
+    PATCH, not verbatim-action POST. Conversational quantity edits ("set the
+    second one to 3") still resolve as normal turns through the D11
+    `set_quantity` followup.
+  - `CartLine` gains `unitPriceUsd` (catalog unit price) — required for the
+    client-side optimistic total; the transcript's confirmation prose per
+    stepper tap disappears with the conversational round trip.
+  - Client-side amendment-anchor fix (the stacked-tables bug): the anchored
+    cart turn is remembered by a stable flag, not the plan's mutable turnId.
 
 ## Amendments (2026-08-30 — owner-directed Phase 2 polish)
 

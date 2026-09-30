@@ -133,7 +133,7 @@ standalone plan; every later cart turn supersedes that anchored plan in place.
 {
   "type": "cart_view",
   "props": {
-    "items": [ { "productId": "aurora-hush-pro", "quantity": 1 } ],
+    "items": [ { "productId": "aurora-hush-pro", "quantity": 1, "unitPriceUsd": 179.0 } ],
     "totalUsd": 179.0
   },
   "actions": [

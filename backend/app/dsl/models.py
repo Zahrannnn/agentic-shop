@@ -185,12 +185,15 @@ class ProductDetailsProps(BaseModel):
 
 
 class CartLine(BaseModel):
-    """One cart row; quantity clamped to 1-10."""
+    """One cart row; quantity clamped to 1-10. ``unit_price_usd`` (D12) is
+    the catalog unit price — the client needs it to recompute the total
+    optimistically when a quantity stepper is tapped."""
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     product_id: str
     quantity: int = Field(ge=1, le=10)
+    unit_price_usd: float = Field(ge=0.0)
 
 
 class CartViewProps(BaseModel):

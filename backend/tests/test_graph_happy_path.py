@@ -579,7 +579,7 @@ async def test_us4_add_view_remove_cart_round_trip() -> None:
     validate_plan(plan2, set(catalog))
     assert plan2.root.type == "cart_view"
     assert plan2.root.props.model_dump(by_alias=True, exclude_none=True) == {
-        "items": [{"productId": EXPECTED_TOP3[0], "quantity": 1}],
+        "items": [{"productId": EXPECTED_TOP3[0], "quantity": 1, "unitPriceUsd": top.price_usd}],
         "totalUsd": top.price_usd,
     }
     assert [(a.type, a.payload) for a in plan2.root.actions] == [
