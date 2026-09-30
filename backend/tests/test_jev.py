@@ -377,11 +377,26 @@ class TestFactoryAndConfig:
 
 
 def _normalize_session(events: list[tuple[str, dict[str, Any]]]) -> list[tuple[str, Any]]:
-    """Blank out ``sessionId`` so two sessions' streams compare equal."""
+    """Blank out session identity so two sessions' streams compare equal.
+
+    ``sessionId`` rides the plan envelope; the A2UI projection embeds it in
+    every message's ``surfaceId`` — both are normalized.
+    """
     normalized: list[tuple[str, Any]] = []
     for event, data in events:
         if isinstance(data, dict) and "sessionId" in data:
             data = {**data, "sessionId": "<session>"}
+        if event == "a2ui_update" and isinstance(data, dict):
+            messages = [
+                {
+                    key: {**value, "surfaceId": "<surface>"}
+                    if isinstance(value, dict) and "surfaceId" in value
+                    else value
+                    for key, value in message.items()
+                }
+                for message in data.get("messages", [])
+            ]
+            data = {"messages": messages}
         normalized.append((event, data))
     return normalized
 

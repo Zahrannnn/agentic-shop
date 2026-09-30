@@ -49,6 +49,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.config import get_stream_writer
 from pydantic import ValidationError
 
+from app.a2ui import plan_to_a2ui_messages
 from app.catalog.loader import load_catalog
 from app.catalog.models import Product
 from app.config import get_settings
@@ -611,6 +612,7 @@ def ui_agent_ask(state: ShoppingState) -> dict[str, Any]:
         return {"error": dict(_PLAN_ERROR_PAYLOAD)}
     serialized = serialize_plan(plan)
     _emit(("ui_update", serialized))
+    _emit_a2ui_projection(serialized)
     messages = [*state.get("messages", []), {"role": "assistant", "content": spoken}]
     return {
         "plan": serialized,
@@ -1080,7 +1082,22 @@ def ui_plan_node(state: ShoppingState) -> dict[str, Any]:
         return {"error": dict(_PLAN_ERROR_PAYLOAD)}
     serialized = serialize_plan(plan)
     _emit(("ui_update", serialized))
+    _emit_a2ui_projection(serialized)
     return {"plan": serialized, "turn_id": plan.turn_id, **extra}
+
+
+def _emit_a2ui_projection(serialized: dict[str, Any]) -> None:
+    """Emit the additive A2UI projection of an already-validated plan (D10).
+
+    Best-effort by contract: the frozen DSL ``ui_update`` stays the truth, so
+    a projection hiccup must never fail a valid turn — it simply skips the
+    ``a2ui_update`` frame (clients render the native plan regardless).
+    """
+    try:
+        messages = plan_to_a2ui_messages(serialized)
+    except Exception:  # noqa: BLE001 — projection is additive, never fatal
+        return
+    _emit(("a2ui_update", messages))
 
 
 # ---------------------------------------------------------------------------

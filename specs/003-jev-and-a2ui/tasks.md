@@ -32,23 +32,24 @@ within each story; golden fixtures are the contract for PR 2/PR 3.
 - [x] J06 Docs: DECISIONS.md D9, `.env.example`, contract error-code list,
       this spec.
 
-## PR 2 — A2UI transpiler + `a2ui_update` (backend)
+## PR 2 — A2UI transpiler + `a2ui_update` (backend) — COMPLETE
 
-- [ ] A01 Golden-fixture test harness: transpile the five
+- [x] A01 Golden-fixture test harness: transpile the five
       `backend/fixtures/ui-plans/*.json` and write byte-stable goldens to
       `backend/fixtures/a2ui/` (red first).
-- [ ] A02 `backend/app/a2ui/transpile.py`: `plan_to_a2ui_messages(plan)`
+- [x] A02 `backend/app/a2ui/transpile.py`: `plan_to_a2ui_messages(plan)`
       — per-turn `createSurface`/`updateComponents`/`updateDataModel`,
       basic-catalog composition of all six component kinds, ChildList
       template + data binding for `product_grid`, lossless action wiring,
       `amendsTurnId` → `deleteSurface` + recreate; version pinned via
       `A2UI_VERSION`.
-- [ ] A03 Round-trip test: every action reconstructs the verbatim `UIAction`
+- [x] A03 Round-trip test: every action reconstructs the verbatim `UIAction`
       (type, label, payload) from the A2UI event.
-- [ ] A04 Emission: `ui_plan_node` emits `("a2ui_update", messages)`;
-      `routes.py` defers it with `ui_update` (order `ui_update →
-      a2ui_update → turn_end`); SSE-order test.
-- [ ] A05 Docs: DECISIONS.md D10, http-api.md optional-event note,
+- [x] A04 Emission: `ui_plan_node`/`ui_agent_ask` emit
+      `("a2ui_update", messages)`; `routes.py` defers them with `ui_update`
+      (order `ui_update → a2ui_update → turn_end`); SSE-order test; wire
+      payload is `{"messages":[…]}` (an object, like every other frame).
+- [x] A05 Docs: DECISIONS.md D10, http-api.md optional-event note,
       FRONTEND_GUIDE.md §4 note; goldens committed.
 
 ## PR 3 — A2UI rendering path (frontend)

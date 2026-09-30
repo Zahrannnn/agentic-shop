@@ -201,10 +201,16 @@ def _payload_to_frame(kind: str, data: Any) -> str | None:
 
     ``ui_update`` is special-cased: contracts/http-api.md and ui-dsl.md require
     the ``data:`` payload to BE the plan envelope itself, so it is serialized
-    directly instead of wrapped in :class:`UIUpdateEvent`'s ``plan`` key.
+    directly instead of wrapped in :class:`UIUpdateEvent`'s ``plan`` key. The
+    additive ``a2ui_update`` projection (D10) carries the A2UI message list
+    the same way.
     """
     if kind == "ui_update":
         return SSEEvent(event="ui_update", data=json.dumps(data, separators=(",", ":"))).frame()
+    if kind == "a2ui_update":
+        return SSEEvent(
+            event="a2ui_update", data=json.dumps({"messages": data}, separators=(",", ":"))
+        ).frame()
     event = _payload_to_event(kind, data)
     return None if event is None else event.to_frame().frame()
 
@@ -225,9 +231,11 @@ async def sse_generator(
     # D7 contract order: statuses -> message_delta -> ui_update -> turn_end.
     # Nodes stream the plan before the narration (D6 runs ui_plan before
     # respond), so the ui_update frame is deferred to preserve the wire order
-    # without buffering the prose. A failed turn drops the deferred plan: the
-    # error frame is the sole terminal output.
+    # without buffering the prose; the additive a2ui_update projection (D10)
+    # is deferred with it and follows ui_update immediately. A failed turn
+    # drops the deferred frames: the error frame is the sole terminal output.
     deferred_ui_frame: str | None = None
+    deferred_a2ui_frame: str | None = None
     try:
         try:
             async for payload in get_graph().astream(
@@ -243,6 +251,9 @@ async def sse_generator(
                     continue
                 if kind == "ui_update":
                     deferred_ui_frame = frame
+                    continue
+                if kind == "a2ui_update":
+                    deferred_a2ui_frame = frame
                     continue
                 yield frame
         except JevError:
@@ -261,6 +272,8 @@ async def sse_generator(
         if not errored:
             if deferred_ui_frame is not None:
                 yield deferred_ui_frame
+            if deferred_a2ui_frame is not None:
+                yield deferred_a2ui_frame
             yield TurnEndEvent().to_frame().frame()
     finally:
         _in_flight.discard(session_id)

@@ -81,8 +81,15 @@ event: message_delta data: {"text":"Based on "}
 event: message_delta data: {"text":"your priorities, "}
 ...
 event: ui_update     data: {<full UI plan — see contracts/ui-dsl.md>}
+event: a2ui_update   data: {"messages":[<A2UI v0.9 message stream>]}   ← optional, ignorable (D10)
 event: turn_end      data: {}
 ```
+
+`a2ui_update` is the additive A2UI projection (DECISIONS.md D10) of the same
+plan, emitted right after `ui_update` and before `turn_end`. It is
+**optional on every turn** (the projection is best-effort and never fails a
+turn); clients that have not opted in MUST ignore it exactly like any unknown
+event name.
 
 Stage values and order: `intent_parsed → searching → found_n → researching →
 ranking → building_ui`. `found_n` carries `count`.

@@ -1,0 +1,74 @@
+[
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "spec-fixture-1",
+      "catalogId": "https://agentic-shop.local/a2ui/catalogs/shopping/v1.json"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "spec-fixture-1",
+      "components": [
+        {
+          "id": "root",
+          "component": "Card",
+          "child": "body"
+        },
+        {
+          "id": "body",
+          "component": "Column",
+          "children": [
+            "cart-row-0",
+            "cart-total"
+          ]
+        },
+        {
+          "id": "cart-item-0",
+          "component": "Text",
+          "text": "aurora-hush-pro"
+        },
+        {
+          "id": "cart-qty-0",
+          "component": "Text",
+          "text": "× 1",
+          "variant": "caption"
+        },
+        {
+          "id": "cart-remove-text-0",
+          "component": "Text",
+          "text": "Remove"
+        },
+        {
+          "id": "cart-remove-0",
+          "component": "Button",
+          "child": "cart-remove-text-0",
+          "action": {
+            "event": {
+              "name": "remove_from_cart",
+              "context": {
+                "productId": "aurora-hush-pro",
+                "label": "Remove"
+              }
+            }
+          }
+        },
+        {
+          "id": "cart-row-0",
+          "component": "Row",
+          "children": [
+            "cart-item-0",
+            "cart-qty-0",
+            "cart-remove-0"
+          ]
+        },
+        {
+          "id": "cart-total",
+          "component": "Text",
+          "text": "Total: $179"
+        }
+      ]
+    }
+  }
+]

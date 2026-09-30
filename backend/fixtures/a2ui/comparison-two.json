@@ -1,0 +1,176 @@
+[
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "spec-fixture-1",
+      "catalogId": "https://agentic-shop.local/a2ui/catalogs/shopping/v1.json"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "spec-fixture-1",
+      "components": [
+        {
+          "id": "root",
+          "component": "Card",
+          "child": "body"
+        },
+        {
+          "id": "body",
+          "component": "Column",
+          "children": [
+            "comparison-header-0",
+            "comparison-header-1",
+            "comparison-header-2",
+            "comparison-header-3",
+            "comparison-header-4",
+            "comparison-header-5",
+            "comparison-row-0",
+            "comparison-row-1"
+          ]
+        },
+        {
+          "id": "comparison-header-0",
+          "component": "Text",
+          "text": "Product",
+          "variant": "caption"
+        },
+        {
+          "id": "comparison-header-1",
+          "component": "Text",
+          "text": "price_usd",
+          "variant": "caption"
+        },
+        {
+          "id": "comparison-header-2",
+          "component": "Text",
+          "text": "battery_hours",
+          "variant": "caption"
+        },
+        {
+          "id": "comparison-header-3",
+          "component": "Text",
+          "text": "weight_g",
+          "variant": "caption"
+        },
+        {
+          "id": "comparison-header-4",
+          "component": "Text",
+          "text": "anc_type",
+          "variant": "caption"
+        },
+        {
+          "id": "comparison-header-5",
+          "component": "Text",
+          "text": "comfort",
+          "variant": "caption"
+        },
+        {
+          "id": "comparison-cell-0-0",
+          "component": "Text",
+          "text": "aurora-hush-pro"
+        },
+        {
+          "id": "comparison-cell-0-1",
+          "component": "Text",
+          "text": "179"
+        },
+        {
+          "id": "comparison-cell-0-2",
+          "component": "Text",
+          "text": "45"
+        },
+        {
+          "id": "comparison-cell-0-3",
+          "component": "Text",
+          "text": "250"
+        },
+        {
+          "id": "comparison-cell-0-4",
+          "component": "Text",
+          "text": "adaptive"
+        },
+        {
+          "id": "comparison-cell-0-5",
+          "component": "Text",
+          "text": "4.7"
+        },
+        {
+          "id": "comparison-choose-text-0",
+          "component": "Text",
+          "text": "Choose Aurora Hush Pro"
+        },
+        {
+          "id": "comparison-choose-0",
+          "component": "Button",
+          "child": "comparison-choose-text-0",
+          "action": {
+            "event": {
+              "name": "choose",
+              "context": {
+                "productId": "aurora-hush-pro",
+                "label": "Choose Aurora Hush Pro"
+              }
+            }
+          }
+        },
+        {
+          "id": "comparison-row-0",
+          "component": "Row",
+          "children": [
+            "comparison-cell-0-0",
+            "comparison-cell-0-1",
+            "comparison-cell-0-2",
+            "comparison-cell-0-3",
+            "comparison-cell-0-4",
+            "comparison-cell-0-5",
+            "comparison-choose-0"
+          ]
+        },
+        {
+          "id": "comparison-cell-1-0",
+          "component": "Text",
+          "text": "cloudline-air"
+        },
+        {
+          "id": "comparison-cell-1-1",
+          "component": "Text",
+          "text": "139"
+        },
+        {
+          "id": "comparison-cell-1-2",
+          "component": "Text",
+          "text": "30"
+        },
+        {
+          "id": "comparison-cell-1-3",
+          "component": "Text",
+          "text": "198"
+        },
+        {
+          "id": "comparison-cell-1-4",
+          "component": "Text",
+          "text": "active"
+        },
+        {
+          "id": "comparison-cell-1-5",
+          "component": "Text",
+          "text": "4.9"
+        },
+        {
+          "id": "comparison-row-1",
+          "component": "Row",
+          "children": [
+            "comparison-cell-1-0",
+            "comparison-cell-1-1",
+            "comparison-cell-1-2",
+            "comparison-cell-1-3",
+            "comparison-cell-1-4",
+            "comparison-cell-1-5"
+          ]
+        }
+      ]
+    }
+  }
+]
