@@ -1156,6 +1156,7 @@ def _cart_view_plan(
     """
     summary = get_cart(cart, get_catalog())
     lines = list(summary.lines)
+    unit_prices = {product.id: product.price_usd for product in get_catalog()}
     actions: list[UIAction] = []
     for line in lines:
         actions.append(
@@ -1192,7 +1193,12 @@ def _cart_view_plan(
             type="cart_view",
             props=CartViewProps(
                 items=[
-                    CartLine(product_id=line.product_id, quantity=line.quantity) for line in lines
+                    CartLine(
+                        product_id=line.product_id,
+                        quantity=line.quantity,
+                        unit_price_usd=unit_prices[line.product_id],
+                    )
+                    for line in lines
                 ],
                 total_usd=summary.total_usd,
             ),

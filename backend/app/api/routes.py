@@ -36,7 +36,11 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
+from app.a2ui import plan_to_a2ui_messages
 from app.api.schemas import (
+    CartLineOut,
+    CartPatchRequest,
+    CartPatchResponse,
     CatalogProductOut,
     CatalogResponse,
     ChatRequest,
@@ -49,10 +53,12 @@ from app.api.schemas import (
     UIUpdateEvent,
 )
 from app.config import get_settings
+from app.dsl.validate import serialize_plan, validate_plan
 from app.graph.builder import get_graph
-from app.graph.nodes import get_catalog
+from app.graph.nodes import _cart_view_plan, get_catalog
 from app.llm.client import StructuredOutputError
 from app.llm.jev import JevError
+from app.tools.cart import get_cart, set_quantity
 
 router = APIRouter()
 
@@ -418,4 +424,85 @@ async def chat(request: ChatRequest) -> StreamingResponse:
         sse_generator(graph_input, config, session_id),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Direct cart mutation (D12) — the quantity-stepper widget path
+# ---------------------------------------------------------------------------
+
+
+@router.patch(
+    "/api/cart",
+    tags=["chat"],
+    summary="Set one cart line's quantity directly (no conversational turn)",
+    description=(
+        "The quantity-stepper widget path (D12): mutates the checkpointed cart "
+        "**directly** — no streamed turn, no model call, no input lock — and "
+        "answers with the authoritative re-rendered `cart_view` plan plus its "
+        "A2UI projection, so the client can swap its anchored cart region in "
+        "place.\n\n"
+        "**Guards:** unknown session answers **404** (`unknown_session`, same "
+        "semantics as the resume check on `/api/chat`); a turn currently "
+        "streaming for the session answers **409** (`turn_in_flight`) — retry "
+        "after `turn_end`. `quantity` must be an integer in [1, 10]; the line "
+        "must already be in the cart (steppers only render on cart rows).\n\n"
+        'Conversational quantity edits ("set the second one to 3") still flow '
+        "through `/api/chat` as normal turns — this endpoint is the widget "
+        "exception to the verbatim-action rule (FR-009)."
+    ),
+    responses={
+        200: {"description": "Cart updated; authoritative re-render returned."},
+        404: {
+            "description": "Session this server process does not know.",
+            "content": {"application/json": {"example": {"detail": "unknown_session"}}},
+        },
+        409: {
+            "description": "A turn is streaming for this session; wait for turn_end.",
+            "content": {"application/json": {"example": {"detail": "turn_in_flight"}}},
+        },
+    },
+)
+async def patch_cart(request: CartPatchRequest) -> CartPatchResponse:
+    """Apply one direct quantity mutation and re-render the cart region."""
+    session_id = request.session_id
+    async with _in_flight_lock:
+        if session_id not in _live_sessions:
+            raise HTTPException(status_code=404, detail="unknown_session")
+        if session_id in _in_flight:
+            raise HTTPException(status_code=409, detail="turn_in_flight")
+
+    config = {"configurable": {"thread_id": session_id}}
+    catalog = get_catalog()
+    state_values = get_graph().get_state(config).values
+    cart: list[dict[str, Any]] = [
+        line for line in (state_values.get("cart") or []) if isinstance(line, dict)
+    ]
+    if not any(line.get("product_id") == request.product_id for line in cart):
+        raise HTTPException(status_code=404, detail="unknown_cart_line")
+
+    new_cart = set_quantity(cart, catalog, request.product_id, request.quantity)
+    get_graph().update_state(config, {"cart": new_cart}, as_node="ui_plan")
+
+    plan = _cart_view_plan(
+        {"session_id": session_id, "turn_id": state_values.get("turn_id", 0)},
+        new_cart,
+        amends_turn_id=state_values.get("cart_plan_turn_id"),
+    )
+    validate_plan(plan, {product.id for product in catalog})
+    serialized = serialize_plan(plan)
+    summary = get_cart(new_cart, catalog)
+    unit_prices = {product.id: product.price_usd for product in catalog}
+    return CartPatchResponse(
+        items=[
+            CartLineOut(
+                product_id=line.product_id,
+                quantity=line.quantity,
+                unit_price_usd=unit_prices[line.product_id],
+            )
+            for line in summary.lines
+        ],
+        total_usd=summary.total_usd,
+        plan=serialized,
+        a2ui={"messages": plan_to_a2ui_messages(serialized)},
     )

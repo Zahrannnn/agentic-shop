@@ -77,6 +77,50 @@ class UIActionIn(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class CartPatchRequest(BaseModel):
+    """Body of ``PATCH /api/cart`` (D12): one direct quantity mutation.
+
+    The widget path — NO transcript turn, no LLM call, no input lock. The
+    server mutates the checkpointed cart, then answers with the authoritative
+    re-rendered ``cart_view`` plan (plus its A2UI projection) so the client
+    can swap its cart region in place.
+    """
+
+    session_id: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=8, max_length=64),
+    ]
+    product_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    quantity: Annotated[int, Field(ge=1, le=10)]
+
+
+class CartLineOut(BaseModel):
+    """One cart line on the PATCH response (camelCase like the DSL)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    product_id: str
+    quantity: int
+    unit_price_usd: float = Field(alias="unitPriceUsd")
+
+
+class CartPatchResponse(BaseModel):
+    """Authoritative cart state after a direct mutation (D12).
+
+    ``plan`` is the re-rendered ``cart_view`` plan envelope (validated
+    against the DSL) and ``a2ui`` its A2UI v0.9 projection — the client
+    swaps its anchored cart region for these, keeping both renderer modes
+    live without a conversational turn.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    items: list[CartLineOut]
+    total_usd: float = Field(alias="totalUsd")
+    plan: dict[str, Any]
+    a2ui: dict[str, Any]
+
+
 class ChatRequest(BaseModel):
     """Body of ``POST /api/chat`` (contracts/http-api.md).
 

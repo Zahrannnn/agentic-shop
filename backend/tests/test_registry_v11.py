@@ -171,9 +171,12 @@ class TestCartSteppers:
         await _turn(client, session, {"message": _FLIGHTS_WITH_PRIORITY})
         events2 = await _turn(client, session, {"message": "add the first one to my cart"})
         plan2 = _plan_of(events2)
-        assert plan2["root"]["props"]["items"] == [
-            {"productId": plan2["root"]["props"]["items"][0]["productId"], "quantity": 1}
-        ]
+        first_item = plan2["root"]["props"]["items"][0]
+        assert first_item == {
+            "productId": first_item["productId"],
+            "quantity": 1,
+            "unitPriceUsd": first_item["unitPriceUsd"],
+        }
         steps = [a for a in plan2["root"]["actions"] if a["type"] == "set_quantity"]
         assert [(s["label"], s["payload"]["quantity"]) for s in steps] == [("+", 2)]
 

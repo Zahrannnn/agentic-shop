@@ -133,3 +133,26 @@ message is safe for display, never raw model output or stack traces).
   text and are resolved in-graph from session state).
 - Sessions are in-memory: after a backend restart the client receives
   `404 unknown_session` and MUST start a new session.
+
+## Direct cart mutation (D12) — `PATCH /api/cart`
+
+The quantity-stepper widget path: **no streamed turn, no model call, no
+input lock**. The client updates its cart region optimistically (from the
+plan's per-line `unitPriceUsd`), persists here, and reconciles against the
+authoritative re-render the endpoint returns.
+
+```
+PATCH /api/cart
+{"session_id": "…", "productId": "aurora-hush-pro", "quantity": 3}
+
+200 → {"items": [{"productId": "…", "quantity": 3, "unitPriceUsd": 179.0}],
+       "totalUsd": 537.0,
+       "plan": {<re-rendered cart_view plan, amending the anchor>},
+       "a2ui": {"messages": [<A2UI v0.9 projection>]}}
+```
+
+Guards: `404 unknown_session` (never-seen session) / `404 unknown_cart_line`
+(product not in the cart); `409 turn_in_flight` while a turn streams (PATCH
+never registers itself as in-flight). `quantity` is an integer in [1, 10]
+(`422` otherwise). This is the documented FR-009 exception: conversational
+quantity edits still flow through `/api/chat` as normal turns.
