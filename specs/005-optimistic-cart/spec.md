@@ -42,3 +42,11 @@ response. No transcript turn, no input lock, no confirmation prose.
 ## Out of scope
 
 Line-price display column, retry queues, multi-tab sync.
+
+## Status
+
+**Complete.** PR 1 `feat/optimistic-cart-backend` (D12 endpoint + unit
+prices), PR 2 `feat/optimistic-cart-frontend` (anchor fix + optimistic
+reconcile). Live acceptance: tap "+" twice fast → one table, instant
+counts, no transcript noise; "what's in my cart?" reflects patches;
+conversational edits still stream as turns.

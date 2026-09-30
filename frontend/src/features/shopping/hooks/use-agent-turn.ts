@@ -16,6 +16,8 @@ import {
   STAGE_ORDER,
   blueprintAmended,
   blueprintReceived,
+  cartQuantityPatched,
+  cartReconciled,
   deltaAppended,
   phaseSetIdle,
   planAmended,
@@ -34,6 +36,7 @@ import {
   turnFailed,
   turnStarted,
   type Stage,
+  type Turn,
 } from "../store";
 import { CATALOG_IDS } from "../utils/catalog-refs";
 import { parseA2uiBlueprint } from "../validations/a2ui-schema";
@@ -267,5 +270,70 @@ export function useAgentTurn() {
     dispatch(startNewSession());
   }, [dispatch]);
 
-  return { turns, phase, isBusy, sessionId, send, startFresh };
+  /**
+   * The optimistic cart quantity (D12): patch the table in the same frame
+   * as the tap, persist via the direct endpoint (no transcript turn, no
+   * input lock), and reconcile against the server's authoritative re-render.
+   * On any failure the optimistic value is reverted. Returns whether the
+   * patch persisted — the shell surfaces a notice when it did not.
+   */
+  const patchQuantity = useCallback(
+    async (productId: string, quantity: number): Promise<boolean> => {
+      const anchor: Turn | undefined = [...turns]
+        .reverse()
+        .find(
+          (turn) =>
+            turn.cartAnchor === true ||
+            (turn.planState === "rendered" &&
+              (turn.plan as { root?: { type?: string } } | null)?.root?.type ===
+                "cart_view"),
+        );
+      const props = (anchor?.plan as
+        | {
+            root: {
+              props: {
+                items: Array<{ productId: string; quantity: number }>;
+              };
+            };
+          }
+        | null
+        | undefined)?.root.props;
+      const previous = props?.items.find((item) => item.productId === productId)?.quantity;
+
+      dispatch(cartQuantityPatched({ productId, quantity }));
+      try {
+        const response = await fetch(`${agentApiBaseUrl}/api/cart`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: sessionId,
+            product_id: productId,
+            quantity,
+          }),
+        });
+        if (!response.ok) {
+          if (typeof previous === "number") {
+            dispatch(cartQuantityPatched({ productId, quantity: previous }));
+          }
+          return false;
+        }
+        const body = (await response.json()) as {
+          plan: unknown;
+          a2ui: { messages: unknown[] };
+        };
+        dispatch(
+          cartReconciled({ plan: body.plan, messages: body.a2ui.messages }),
+        );
+        return true;
+      } catch {
+        if (typeof previous === "number") {
+          dispatch(cartQuantityPatched({ productId, quantity: previous }));
+        }
+        return false;
+      }
+    },
+    [dispatch, sessionId, turns],
+  );
+
+  return { turns, phase, isBusy, sessionId, send, startFresh, patchQuantity };
 }

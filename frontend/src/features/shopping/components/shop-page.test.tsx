@@ -33,6 +33,7 @@ type HookValue = {
   sessionId: string;
   send: (input: unknown) => Promise<SendOutcomeLike>;
   startFresh: () => void;
+  patchQuantity: (productId: string, quantity: number) => Promise<boolean>;
 };
 
 const SESSION_ID = "b7e6a1c2-3f4d-4a5b-8c9d-0e1f2a3b4c5d";
@@ -46,6 +47,7 @@ const hook = vi.hoisted(() => {
       sessionId: "b7e6a1c2-3f4d-4a5b-8c9d-0e1f2a3b4c5d",
       send: vi.fn(async () => ({ kind: "started" })),
       startFresh: vi.fn(),
+    patchQuantity: vi.fn(async (): Promise<boolean> => true),
     } as {
       turns: Turn[];
       phase: "idle" | "streaming";
@@ -57,6 +59,7 @@ const hook = vi.hoisted(() => {
         detail?: unknown;
       }>;
       startFresh: () => void;
+  patchQuantity: (productId: string, quantity: number) => Promise<boolean>;
     },
   };
 });
@@ -75,6 +78,7 @@ function baseHook(): HookValue {
       async (): Promise<SendOutcomeLike> => ({ kind: "started" }),
     ),
     startFresh: vi.fn(),
+    patchQuantity: vi.fn(async (): Promise<boolean> => true),
   };
 }
 
@@ -381,6 +385,51 @@ describe("ShopPage thinking states", () => {
     });
     render(<ShopPage />);
     expect(scrollIntoView).toHaveBeenCalled();
+  });
+
+  it("surfaces a notice when a direct cart patch fails to persist (D12)", async () => {
+    setHook({
+      phase: "idle",
+      isBusy: false,
+      patchQuantity: vi.fn(async (): Promise<boolean> => false),
+      turns: [
+        makeTurn({
+          id: 1,
+          userText: "add the first one",
+          deltas: "Added Skyline Hush to your cart.",
+          plan: {
+            planVersion: "1",
+            sessionId: SESSION_ID,
+            turnId: 1,
+            root: {
+              type: "cart_view",
+              props: {
+                items: [{ productId: "skyline-hush", quantity: 2, unitPriceUsd: 99 }],
+                totalUsd: 198,
+              },
+              actions: [
+                {
+                  type: "set_quantity",
+                  label: "+",
+                  payload: { productId: "skyline-hush", quantity: 3 },
+                },
+              ],
+            },
+            planState: "rendered",
+          },
+          planState: "rendered",
+        }),
+      ],
+    });
+    render(<ShopPage />);
+
+    expect(screen.queryByTestId("cart-patch-error")).not.toBeInTheDocument();
+
+    // The tap goes to the PATCH path (not the conversational action)...
+    fireEvent.click(screen.getByTestId("action-set_quantity"));
+    expect(hook.current.send).not.toHaveBeenCalled();
+    // ...and the failure surfaces the notice.
+    expect(await screen.findByTestId("cart-patch-error")).toBeInTheDocument();
   });
 
   it("shows the thinking skeleton while streaming with no prose yet", () => {

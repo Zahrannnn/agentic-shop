@@ -3,6 +3,8 @@ import type { RootState } from "@/shared/store/store";
 import {
   STAGE_ORDER,
   blueprintAmended,
+  cartQuantityPatched,
+  cartReconciled,
   blueprintReceived,
   deltaAppended,
   phaseSetIdle,
@@ -453,5 +455,97 @@ describe("blueprint reducers (D10 additive A2UI projection)", () => {
       blueprintAmended({ amendsTurnId: 1, messages: null }),
     );
     expect(state.turns[0].blueprint).toBeNull();
+  });
+});
+
+describe("optimistic cart (D12)", () => {
+  const CART_PLAN_QTY_2 = {
+    planVersion: "1",
+    sessionId: "sess-1",
+    turnId: 5,
+    root: {
+      type: "cart_view",
+      props: {
+        items: [{ productId: "aurora-hush-pro", quantity: 2, unitPriceUsd: 179 }],
+        totalUsd: 358,
+      },
+      actions: [],
+    },
+  };
+
+  function withCartAnchorTurn(): TranscriptState {
+    return withTurn({
+      plan: CART_PLAN_QTY_2,
+      planState: "rendered",
+    });
+  }
+
+  it("cartQuantityPatched sets the line and recomputes the total from unit prices", () => {
+    const state = transcriptReducer(
+      withCartAnchorTurn(),
+      cartQuantityPatched({ productId: "aurora-hush-pro", quantity: 4 }),
+    );
+    const props = (
+      currentTurn(state).plan as typeof CART_PLAN_QTY_2
+    ).root.props;
+    expect(props.items[0].quantity).toBe(4);
+    expect(props.totalUsd).toBe(716); // 4 × 179, exact from the unit price
+  });
+
+  it("cartQuantityPatched is a no-op without a rendered cart", () => {
+    const state = transcriptReducer(
+      withTurn(),
+      cartQuantityPatched({ productId: "aurora-hush-pro", quantity: 4 }),
+    );
+    expect(currentTurn(state).plan).toBeNull();
+  });
+
+  it("cartReconciled swaps the anchor's plan + blueprint and flags it", () => {
+    const serverPlan = {
+      planVersion: "1",
+      sessionId: "sess-1",
+      turnId: 9,
+      root: {
+        type: "cart_view",
+        props: {
+          items: [{ productId: "aurora-hush-pro", quantity: 3, unitPriceUsd: 179 }],
+          totalUsd: 537,
+        },
+        actions: [],
+      },
+    };
+    const messages = [{ version: "v0.9" }];
+    const state = transcriptReducer(
+      withCartAnchorTurn(),
+      cartReconciled({ plan: serverPlan, messages }),
+    );
+    const turn = currentTurn(state);
+    expect(turn.cartAnchor).toBe(true);
+    expect(turn.plan).toEqual(serverPlan);
+    expect(turn.planState).toBe("rendered");
+    expect(turn.blueprint).toEqual(messages);
+  });
+
+  it("keeps amending the SAME turn after its plan turnId moved (D12 regression)", () => {
+    // First amendment: lands by turnId and FLAGS the anchor.
+    let state = withTurn({
+      plan: { planVersion: "1", sessionId: "sess-1", turnId: 2 },
+      planState: "rendered",
+    });
+    state = transcriptReducer(
+      state,
+      planAmended({ amendsTurnId: 2, plan: { turnId: 7 } }),
+    );
+    expect(currentTurn(state).cartAnchor).toBe(true);
+    expect(currentTurn(state).plan).toEqual({ turnId: 7 });
+
+    // Second amendment: the old turnId lookup would miss (plan now says 7) —
+    // the flag keeps it landing in place.
+    state = transcriptReducer(
+      state,
+      planAmended({ amendsTurnId: 2, plan: { turnId: 8 } }),
+    );
+    expect(currentTurn(state).plan).toEqual({ turnId: 8 });
+    expect(currentTurn(state).planState).toBe("rendered");
   });
 });

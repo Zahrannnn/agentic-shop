@@ -165,7 +165,9 @@ describe("fixture acceptance (backend fixtures parse through the gate)", () => {
   it("round-trips the cart view fixture", () => {
     const { plan } = expectOk(parseUiPlan(loadFixture("cart-one-item"), CATALOG_IDS));
     const root = expectRoot(plan, "cart_view");
-    expect(root.props.items).toEqual([{ productId: "aurora-hush-pro", quantity: 1 }]);
+    expect(root.props.items).toEqual([
+      { productId: "aurora-hush-pro", quantity: 1, unitPriceUsd: 179 },
+    ]);
     expect(root.props.totalUsd).toBe(179);
     expect(root.actions[0]?.type).toBe("remove_from_cart");
     expect(root.actions[0]?.payload).toEqual({ productId: "aurora-hush-pro" });

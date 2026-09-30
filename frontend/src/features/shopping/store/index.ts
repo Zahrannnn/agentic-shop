@@ -13,6 +13,8 @@ export {
   STAGE_ORDER,
   blueprintAmended,
   blueprintReceived,
+  cartQuantityPatched,
+  cartReconciled,
   deltaAppended,
   phaseSetIdle,
   planAmended,

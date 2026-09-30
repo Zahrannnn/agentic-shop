@@ -168,6 +168,8 @@ const productDetailsComponentSchema = z.object({
 const cartLineSchema = z.object({
   productId: z.string().min(1),
   quantity: z.number().int().min(1).max(10),
+  /** Catalog unit price (D12) — the client recompute's optimistic totals. */
+  unitPriceUsd: z.number().nonnegative(),
 });
 
 const cartViewComponentSchema = z.object({
