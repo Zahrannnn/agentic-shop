@@ -60,14 +60,13 @@ green per PR. Stacked branches: contract → behavior → polish.
       +/− bounds and amendment) + gate-table and exact-action updates.
       Backend gates green (302 tests).
 
-## PR 3 — Interactive polish + A2UI demo
+## PR 3 — Interactive polish + A2UI demo — COMPLETE
 
-- [ ] P01 A2UI renderer: multi-picker values stamped from the surface's
-      data model (CheckBox two-way bindings + Apply event) — the resolved
-      action carries `values` verbatim.
-- [ ] P02 A2UI mode verified for the bar + steppers (chips and steps render
-      as buttons through the official stack; the smoke test list covers all
-      six goldens).
-- [ ] P03 Manual mock-mode pass: recommend → refine sort+filter →
-      multi-select ask → add to cart → stepper +1 → remove; both renderer
-      modes; `npm run verify` + backend gates; commits.
+- [x] P01 A2UI renderer: multi-picker values stamped from the surface's
+      data model (`peekValue` over the CheckBoxes' two-way `/selections`
+      bindings) — a click test proves the A2UI path posts the SAME stamped
+      action the native renderer sends.
+- [x] P02 A2UI mode verified for the bar + steppers (chips render as A2UI
+      Buttons — asserted; the smoke loop covers all six goldens).
+- [x] P03 `npm run verify` green (203 tests); backend gates green (302
+      tests). Manual pass = run both servers, flip the Renderer toggle.

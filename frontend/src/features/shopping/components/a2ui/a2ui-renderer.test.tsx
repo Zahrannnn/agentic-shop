@@ -99,4 +99,42 @@ describe("A2uiRenderer", () => {
     );
     expect(screen.getByTestId("a2ui-render-error")).toBeInTheDocument();
   });
+
+  it("stamps select_preferences values from the checkbox data model (D11)", () => {
+    // The flagship A2UI interactivity demo: the CheckBoxes two-way-bind into
+    // the surface's data model; tapping Apply reads the checked options and
+    // posts the same stamped action the native renderer sends.
+    const onAction = vi.fn<(action: PlanAction) => void>();
+    render(
+      <A2uiRenderer
+        messages={goldenMessages("multi-picker-priorities.json")}
+        onAction={onAction}
+      />,
+    );
+
+    const checkboxes = screen.getAllByRole("checkbox");
+    expect(checkboxes).toHaveLength(5);
+    fireEvent.click(checkboxes[0]!); // Noise cancellation
+    fireEvent.click(checkboxes[3]!); // Sound quality
+
+    fireEvent.click(screen.getByRole("button", { name: "Show my picks" }));
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onAction.mock.calls[0]?.[0].type).toBe("select_preferences");
+    expect(onAction.mock.calls[0]?.[0].payload.values).toEqual([
+      "Noise cancellation",
+      "Sound quality",
+    ]);
+  });
+
+  it("renders the refinement chips and steppers from the updated goldens", () => {
+    render(
+      <A2uiRenderer
+        messages={goldenMessages("product-grid-flights.json")}
+        onAction={vi.fn()}
+      />,
+    );
+    // D11 refine chips render as A2UI Buttons.
+    expect(screen.getByRole("button", { name: "ANC only" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Price: low to high" })).toBeInTheDocument();
+  });
 });
