@@ -10,7 +10,10 @@ The widget path: no streamed turn, no model call, no input lock. Covered:
   (product not in the cart), 409 turn_in_flight (read-only check — a PATCH
   never registers itself), 422 for quantity bounds;
 - the conversational path is untouched: a follow-up turn after patches still
-  amends the same anchor.
+  amends the same anchor;
+- the browser path: PATCH is a non-simple method, so the CORS layer must pass
+  its preflight (regression — the D12 widget path was dead cross-origin until
+  PATCH joined the allow_methods list).
 """
 
 from __future__ import annotations
@@ -165,3 +168,32 @@ class TestPatchCart:
         plan = next(data for name, data in events if name == "ui_update")
         assert plan["root"]["props"]["items"][0]["quantity"] == 3
         assert plan["amendsTurnId"] == cart_plan["turnId"]
+
+
+class TestCorsPreflight:
+    async def test_patch_preflight_is_allowed(self, client: httpx.AsyncClient) -> None:
+        """Browsers preflight PATCH before the D12 widget can fire; the
+        middleware must answer it with the method in the allow header."""
+        response = await client.options(
+            "/api/cart",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "PATCH",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+        assert "PATCH" in response.headers["access-control-allow-methods"]
+
+    async def test_preflight_from_a_foreign_origin_is_rejected(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        response = await client.options(
+            "/api/cart",
+            headers={
+                "Origin": "http://evil.example",
+                "Access-Control-Request-Method": "PATCH",
+            },
+        )
+        assert response.status_code == 400
