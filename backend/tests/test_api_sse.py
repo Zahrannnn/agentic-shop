@@ -42,7 +42,7 @@ async def _post_stream(
 async def test_health_reports_mock_mode(client) -> None:
     response = await client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "mode": "mock"}
+    assert response.json() == {"status": "ok", "mode": "mock", "jevMode": "off"}
 
 
 async def test_us1_happy_path_frame_order(client) -> None:

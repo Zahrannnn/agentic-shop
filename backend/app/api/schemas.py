@@ -60,7 +60,17 @@ STAGE_ORDER: tuple[Stage, ...] = (
 
 
 class UIActionIn(BaseModel):
-    """A rendered plan action echoed back by the client (data-model.md ``UIAction``)."""
+    """A rendered plan action echoed back by the client (data-model.md ``UIAction``).
+
+    ``type`` is one of the contract's nine action kinds (D11 added the last
+    three): ``compare``, ``details``, ``select_preference``, ``add_to_cart``,
+    ``remove_from_cart``, ``choose``, ``refine`` (flat target-state payload —
+    ``sort`` / ``ancOnly`` / ``minBatteryHours`` / ``maxPriceUsd``),
+    ``set_quantity`` (``productId`` + integer ``quantity`` in [1, 10]), and
+    ``select_preferences`` (``values`` = the checked option names). The
+    action object travels verbatim — the server resolves targets against the
+    session's last plan/ranking, never the client.
+    """
 
     type: str
     label: str = ""

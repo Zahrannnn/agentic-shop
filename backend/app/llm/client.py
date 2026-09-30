@@ -525,22 +525,37 @@ def _build_llm(settings: Any) -> Any:
     from langchain_openai import ChatOpenAI  # noqa: PLC0415 — lazy, mock stays light
 
     # LLM_API_STYLE=responses selects gateway models that only expose the
-    # OpenAI Responses API (e.g. muse-spark on OpenCode Zen). Passing the
-    # responses-only "truncation" key makes langchain route requests to
-    # /responses instead of /chat/completions; it is a valid no-op there.
+    # OpenAI Responses API (e.g. muse-spark on OpenCode Zen). The "truncation"
+    # key makes langchain route requests to /responses instead of
+    # /chat/completions; it is only attached on that style, and only when
+    # set: passing model_kwargs=None crashes langchain-openai's kwargs
+    # builder, and standard-completions providers must not receive it at all.
     api_style = str(settings.LLM_API_STYLE or "").strip().lower()
-    model_kwargs = {"truncation": "disabled"} if api_style == "responses" else None
-    return ChatOpenAI(
-        model=settings.LLM_MODEL,
-        api_key=settings.OPENCODE_API_KEY,
-        base_url=settings.OPENCODE_BASE_URL or None,
-        temperature=0,  # literal 0 — determinism, constitution III
-        timeout=120,
-        model_kwargs=model_kwargs,
-    )
+
+    # LLM_SDK=zai routes real calls through Z.ai's official SDK transport
+    # (app/llm/zai.py) instead of the generic OpenAI-compatible client.
+    if str(getattr(settings, "LLM_SDK", "openai") or "openai").strip().lower() == "zai":
+        from app.llm.zai import build_chat_zai  # noqa: PLC0415 — lazy, off by default
+
+        return build_chat_zai(
+            model=settings.LLM_MODEL,
+            api_key=settings.OPENCODE_API_KEY,
+            base_url=settings.OPENCODE_BASE_URL,
+        )
+
+    client_options: dict[str, Any] = {
+        "model": settings.LLM_MODEL,
+        "api_key": settings.OPENCODE_API_KEY,
+        "base_url": settings.OPENCODE_BASE_URL or None,
+        "temperature": 0,  # literal 0 — determinism, constitution III
+        "timeout": 120,
+    }
+    if api_style == "responses":
+        client_options["model_kwargs"] = {"truncation": "disabled"}
+    return ChatOpenAI(**client_options)
 
 
-_llm_cache_key: tuple[str, str, str, str, str] | None = None
+_llm_cache_key: tuple[str, str, str, str, str, str] | None = None
 _cached_llm: Any | None = None
 
 
@@ -548,7 +563,8 @@ def get_llm() -> Any:
     """Return the cached LLM instance for the current settings.
 
     Mock mode (default) needs no key; real mode wires ``ChatOpenAI`` to the
-    OpenCode gateway strictly via environment configuration. The instance is
+    OpenCode gateway strictly via environment configuration — transported by
+    the generic OpenAI client or Z.ai's SDK per ``LLM_SDK``. The instance is
     cached per settings tuple; call :func:`reset_llm_cache` in tests after
     changing the environment.
     """
@@ -562,6 +578,7 @@ def get_llm() -> Any:
         str(settings.OPENCODE_BASE_URL or ""),
         str(settings.OPENCODE_API_KEY or ""),
         str(getattr(settings, "LLM_API_STYLE", "auto") or "auto"),
+        str(getattr(settings, "LLM_SDK", "openai") or "openai"),
     )
     if _cached_llm is None or key != _llm_cache_key:
         _cached_llm = _build_llm(settings)

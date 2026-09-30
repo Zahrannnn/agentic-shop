@@ -133,14 +133,17 @@ def test_allowed_origins_parsing_and_default(clean_env) -> None:
 
 
 async def test_health_never_echoes_secrets(client) -> None:
-    """The health payload is exactly {status, mode} — no key names or values."""
+    """The health payload is exactly {status, mode, jevMode} — no key names or
+    values. The mode STRINGS are safe to expose; keys never are."""
     response = await client.get("/health")
     assert response.status_code == 200
     body = response.text
-    assert response.json() == {"status": "ok", "mode": "mock"}
-    assert set(response.json()) == {"status", "mode"}
+    assert response.json() == {"status": "ok", "mode": "mock", "jevMode": "off"}
+    assert set(response.json()) == {"status", "mode", "jevMode"}
     # Explicit secret-hygiene asserts (US5): neither the variable names nor
     # any configured value may appear in the response.
     assert "OPENCODE_API_KEY" not in body
     assert "LLM_MODEL" not in body
     assert "OPENCODE_BASE_URL" not in body
+    assert "JEV_API_KEY" not in body
+    assert "JEV_BASE_URL" not in body
