@@ -176,6 +176,12 @@ export function ShopPage() {
   // Contextual quick replies: derived from the latest rendered plan so the
   // next step is one tap (workbench, not chat).
   const latestTurn = turns.at(-1) ?? null;
+  // Overdrive: the last turn holding a rendered plan carries the view-
+  // transition morph identity (grid -> detail move).
+  const lastPlanIndex = turns.reduce(
+    (last, turn, index) => (turn.planState === "rendered" ? index : last),
+    -1,
+  );
   const quickReplies =
     !isBusy && latestTurn?.planState === "rendered"
       ? quickRepliesFor(latestTurn.plan)
@@ -248,6 +254,7 @@ export function ShopPage() {
                     onAction={handleAction}
                     onQuantityPatch={handleQuantityPatch}
                     rendererKind={rendererKind}
+                    named={index === lastPlanIndex}
                   />
                 </li>
               ))}

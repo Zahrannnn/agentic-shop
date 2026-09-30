@@ -157,6 +157,11 @@ export type TranscriptTurnProps = {
    * without a blueprint falls back to native with a small notice.
    */
   rendererKind?: "native" | "a2ui";
+  /**
+   * Overdrive: true while this turn holds the last rendered plan — its
+   * product name/price carry the view-transition morph identity.
+   */
+  named?: boolean;
 };
 
 export function TranscriptTurn({
@@ -166,6 +171,7 @@ export function TranscriptTurn({
   onAction,
   onQuantityPatch,
   rendererKind = "native",
+  named = false,
 }: TranscriptTurnProps) {
   const working = isStreaming && turn.terminal === null;
   const waitingForProse = working && turn.deltas.length === 0;
@@ -260,6 +266,7 @@ export function TranscriptTurn({
             <PlanRenderer
               plan={turn.plan as UiPlan}
               onAction={handleActionWithPatch}
+              named={named}
             />
           )
         ) : null}

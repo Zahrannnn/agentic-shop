@@ -24,9 +24,15 @@ export type OnPlanAction = (action: PlanAction) => void;
 export type PlanRendererProps = {
   plan: UiPlan;
   onAction: OnPlanAction;
+  /**
+   * D10/overdrive: when true (the last turn with a rendered plan), the
+   * product name/price carry view-transition names so the grid→detail move
+   * morphs through the View Transitions API instead of hard-cutting.
+   */
+  named?: boolean;
 };
 
-export function PlanRenderer({ plan, onAction }: PlanRendererProps) {
+export function PlanRenderer({ plan, onAction, named = false }: PlanRendererProps) {
   const root = plan.root;
 
   switch (root.type) {
@@ -36,6 +42,7 @@ export function PlanRenderer({ plan, onAction }: PlanRendererProps) {
           props={root.props}
           actions={root.actions}
           onAction={onAction}
+          named={named}
         />
       );
     case "preference_picker":
@@ -55,7 +62,7 @@ export function PlanRenderer({ plan, onAction }: PlanRendererProps) {
         />
       );
     case "product_details":
-      return <ProductDetails props={root.props} />;
+      return <ProductDetails props={root.props} named={named} />;
     case "cart_view":
       return (
         <CartView props={root.props} actions={root.actions} onAction={onAction} />

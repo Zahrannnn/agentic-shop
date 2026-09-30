@@ -24,6 +24,9 @@ export type ProductGridComponentProps = {
   props: ProductGridProps;
   actions: PlanAction[];
   onAction: (action: PlanAction) => void;
+  /** D10/overdrive: true while this grid is the last rendered plan — its
+   * name/price carry view-transition names for the grid→detail morph. */
+  named?: boolean;
 };
 
 const rankLabel = (index: number): string => String(index + 1).padStart(2, "0");
@@ -103,7 +106,12 @@ function RefinementBar({
   );
 }
 
-export function ProductGrid({ props, actions, onAction }: ProductGridComponentProps) {
+export function ProductGrid({ props, actions, onAction, named = false }: ProductGridComponentProps) {
+  // One shared morph identity per product: the detail card's title/price
+  // reuse these names, so the View Transition moves the old card into the
+  // new header instead of hard-cutting.
+  const morphName = (productId: string) =>
+    named ? { viewTransitionName: `product-${productId}` } : undefined;
   // One button per unique action type: details/add_to_cart attach to every
   // card, compare is a single grid-level control, and each refine chip is its
   // own grid-level action. Actions post verbatim — positional resolution
@@ -164,6 +172,7 @@ export function ProductGrid({ props, actions, onAction }: ProductGridComponentPr
                     "text-base font-medium leading-snug",
                     recommended && "underline decoration-primary decoration-2 underline-offset-4",
                   )}
+                  style={morphName(productId)}
                 >
                   {product?.name ?? productId}
                 </p>

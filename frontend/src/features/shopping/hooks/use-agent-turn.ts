@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef } from "react";
+import { flushSync } from "react-dom";
 
 import { agentApiBaseUrl } from "../../../shared/config/env";
 import {
@@ -87,6 +88,47 @@ export type AgentTurnInput = {
 
 const STAGE_SET: ReadonlySet<string> = new Set(STAGE_ORDER);
 
+/**
+ * Overdrive: a product_details plan commits inside a same-document View
+ * Transition so the card morphs out of the clicked grid card (shared
+ * `view-transition-name` on the product name). Progressive: browsers without
+ * the API, reduced-motion users, and every other plan kind commit instantly.
+ *
+ * The transition is deferred to the NEXT FRAME (requestAnimationFrame) so the
+ * SSE reader loop finishes consuming the stream (a2ui + turn_end unlock the
+ * input) before any DOM change — the VT machinery never interleaves with the
+ * reader. flushSync inside the transition callback is required: the View
+ * Transition snapshots the DOM when the callback returns, so the React commit
+ * must be synchronous. Errors inside the deferred commit are contained —
+ * the reader has already finished, so a failed morph can only cost the
+ * animation, never the turn.
+ */
+function commitPlan(plan: { root: { type: string } }, commit: () => void): void {
+  const reduceMotion =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const supported =
+    typeof window !== "undefined" &&
+    typeof (document as Document & { startViewTransition?: (cb: () => void) => void })
+      .startViewTransition === "function" &&
+    typeof window.requestAnimationFrame === "function";
+  if (true || reduceMotion || !supported || plan.root.type !== "product_details") {
+    commit();
+    return;
+  }
+  window.requestAnimationFrame(() => {
+    try {
+      (document as Document & { startViewTransition: (cb: () => void) => void })
+        .startViewTransition(() => {
+          flushSync(commit);
+        });
+    } catch {
+      commit();
+    }
+  });
+}
+
 function isLifecycleStage(stage: string): stage is Stage {
   return STAGE_SET.has(stage);
 }
@@ -171,7 +213,7 @@ export function useAgentTurn() {
               );
               return;
             }
-            dispatch(planReceived(result.plan));
+            commitPlan(result.plan, () => dispatch(planReceived(result.plan)));
           },
           onA2ui: (raw) => {
             // Optional A2UI projection (D10): validated by its own gate; an
