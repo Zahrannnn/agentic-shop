@@ -17,6 +17,11 @@ _LLM_MODES: frozenset[str] = frozenset({"mock", "real"})
 #: The only valid ``LLM_API_STYLE`` values (validated case-insensitively).
 _LLM_API_STYLES: frozenset[str] = frozenset({"auto", "responses"})
 
+#: The only valid ``LLM_SDK`` values (validated case-insensitively): which
+#: client library transports real-mode calls — the generic OpenAI-compatible
+#: client, or Z.ai's official SDK (``app.llm.zai``, D8 constitution II).
+_LLM_SDKS: frozenset[str] = frozenset({"openai", "zai"})
+
 #: The only valid ``JEV_MODE`` values (validated case-insensitively). ``off``
 #: keeps the LLM intent path; ``mock``/``real`` route intent through the Jev
 #: judgment layer (DECISIONS.md D9).
@@ -39,6 +44,11 @@ class Settings(BaseSettings):
     #: "auto" (default) or "responses" for gateway models that only expose
     #: the OpenAI Responses API (e.g. muse-spark on OpenCode Zen).
     LLM_API_STYLE: str = "auto"
+    #: Which client library transports real-mode calls (D8): "openai" — the
+    #: generic OpenAI-compatible client; "zai" — Z.ai's official SDK
+    #: (``app/llm/zai.py``), used together with
+    #: ``OPENCODE_BASE_URL=https://api.z.ai/api/paas/v4``.
+    LLM_SDK: str = "openai"
     #: Comma-separated browser origins allowed to call the API from a browser
     #: (CORS; architecture-review fix). Defaults are the Next.js dev servers.
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
@@ -71,6 +81,16 @@ class Settings(BaseSettings):
         if normalized not in _LLM_API_STYLES:
             allowed = ", ".join(sorted(_LLM_API_STYLES))
             raise ValueError(f"LLM_API_STYLE must be one of: {allowed} (got {value!r})")
+        return normalized
+
+    @field_validator("LLM_SDK", mode="after")
+    @classmethod
+    def _validate_llm_sdk(cls, value: str) -> str:
+        """Only ``openai`` / ``zai`` (case-insensitive, stripped); normalize."""
+        normalized = value.strip().lower()
+        if normalized not in _LLM_SDKS:
+            allowed = ", ".join(sorted(_LLM_SDKS))
+            raise ValueError(f"LLM_SDK must be one of: {allowed} (got {value!r})")
         return normalized
 
     @field_validator("JEV_MODE", mode="after")

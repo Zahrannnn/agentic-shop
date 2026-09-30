@@ -51,10 +51,14 @@ def jev_env(monkeypatch: pytest.MonkeyPatch):
     ``get_settings`` is ``lru_cache``d and reads env at construction, so every
     reconfiguration must clear both caches (and again at teardown, so no
     ``JEV_MODE`` from this test leaks into a later one via a cached Settings).
+    ``JEV_API_KEY`` is pinned to EMPTY unless explicitly overridden — env vars
+    beat the ``.env`` file, so a developer's real key must not leak into the
+    ``real``-mode fail-fast tests.
     """
 
     def configure(mode: str, **overrides: str) -> None:
         monkeypatch.setenv("JEV_MODE", mode)
+        monkeypatch.setenv("JEV_API_KEY", overrides.pop("JEV_API_KEY", ""))
         for name, value in overrides.items():
             monkeypatch.setenv(name, value)
         _reset_caches()

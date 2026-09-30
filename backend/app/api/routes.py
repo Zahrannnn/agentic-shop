@@ -81,25 +81,32 @@ _INTERNAL_ERROR_MESSAGE = "Something went wrong on our side. Please try again."
 @router.get(
     "/health",
     tags=["system"],
-    summary="Liveness probe plus the effective LLM mode",
+    summary="Liveness probe plus the effective LLM and Jev modes",
     description=(
-        'Returns `{"status": "ok"}` and the effective mode: `mock` (deterministic, '
-        "keyless, offline) or `real` (OpenCode gateway). Never echoes secrets."
+        'Returns `{"status": "ok"}` plus two independent mode reports: `mode` — '
+        "the LLM pipeline: `mock` (deterministic, keyless, offline) or `real` "
+        "(OpenCode gateway) — and `jevMode` (D9): `off` (LLM intent path), "
+        "`mock` (deterministic keyless judgments), or `real` (TypeSafe Jev "
+        "handles intent extraction). Never echoes secrets."
     ),
     responses={
         200: {
             "description": "Service is up.",
             "content": {
                 "application/json": {
-                    "example": {"status": "ok", "mode": "mock"},
+                    "example": {"status": "ok", "mode": "mock", "jevMode": "off"},
                     "examples": {
-                        "mock": {
-                            "summary": "Mock mode (default)",
-                            "value": {"status": "ok", "mode": "mock"},
+                        "defaults": {
+                            "summary": "Mock LLM, Jev off (the defaults)",
+                            "value": {"status": "ok", "mode": "mock", "jevMode": "off"},
+                        },
+                        "jev_real": {
+                            "summary": "Mock LLM with real Jev judgments (D9)",
+                            "value": {"status": "ok", "mode": "mock", "jevMode": "real"},
                         },
                         "real": {
                             "summary": "Real gateway model configured",
-                            "value": {"status": "ok", "mode": "real"},
+                            "value": {"status": "ok", "mode": "real", "jevMode": "off"},
                         },
                     },
                 }
@@ -108,8 +115,13 @@ _INTERNAL_ERROR_MESSAGE = "Something went wrong on our side. Please try again."
     },
 )
 async def health() -> dict[str, str]:
-    """Liveness plus the effective LLM mode; never echoes secrets."""
-    return {"status": "ok", "mode": "mock" if get_settings().is_mock else "real"}
+    """Liveness plus the effective LLM and Jev modes; never echoes secrets."""
+    settings = get_settings()
+    return {
+        "status": "ok",
+        "mode": "mock" if settings.is_mock else "real",
+        "jevMode": settings.JEV_MODE,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -291,7 +303,12 @@ _SSE_SUCCESS_EXAMPLE = (
     'event: ui_update\ndata: {"planVersion":"1","sessionId":"demo-12345","turnId":1,'
     '"root":{"type":"product_grid","props":{"title":"Best matches for your needs",'
     '"productIds":["aurora-hush-pro","cloudline-air","maple-ridge-comfort-150"],'
-    '"ranked":true},"actions":[{"type":"compare","label":"Compare","payload":{}}]}}\n\n'
+    '"ranked":true,"refinement":{"sort":"relevance","filters":{}}},'
+    '"actions":[{"type":"compare","label":"Compare","payload":{}},'
+    '{"type":"refine","label":"Top rated","payload":{"sort":"rating"}}]}}\n\n'
+    'event: a2ui_update\ndata: {"messages":[{"version":"v0.9",'
+    '"createSurface":{"surfaceId":"demo-12345-1",'
+    '"catalogId":"https://agentic-shop.local/a2ui/catalogs/shopping/v1.json"}}]}\n\n'
     "event: turn_end\ndata: {}\n\n"
 )
 
@@ -306,14 +323,23 @@ _SSE_SUCCESS_EXAMPLE = (
         "**Frame order (fixed):** zero or more `status` (stages in order "
         "`intent_parsed → searching → found_n → researching → ranking → building_ui`), "
         "then `message_delta` prose increments, then at most one `ui_update` carrying "
-        "a **full UI plan** (full replace — never a delta), then exactly one terminal "
-        "frame: `turn_end` on success, `error` on failure (nothing follows it).\n\n"
+        "a **full UI plan** (full replace — never a delta), then at most one optional "
+        "`a2ui_update` carrying the same plan projected to an A2UI v0.9 message "
+        "stream (D10 — ignorable by clients that did not opt in), then exactly one "
+        "terminal frame: `turn_end` on success, `error` on failure (nothing follows "
+        "it).\n\n"
+        "**Actions (D11):** `ui_action` echoes a rendered plan action verbatim — one "
+        "of `compare`, `details`, `select_preference`, `add_to_cart`, "
+        "`remove_from_cart`, `choose`, `refine`, `set_quantity`, "
+        "`select_preferences`. `refine` chips carry their complete target state and "
+        "re-run search + ranking in one turn.\n\n"
         "**Sessions:** `session_id` scopes the conversation; state lives in server "
         "memory. Send `resume: true` when re-attaching to a conversation this server "
         "may not know (e.g. after a restart) — an unknown session answers **404** and "
         "the client should restart without the flag.\n\n"
         "**Plan documents:** `ui_update` data is the plan envelope itself. The "
-        "component registry, prop bounds, and allowed actions are specified in "
+        "component registry (7 kinds incl. `multi_picker`), prop bounds, and allowed "
+        "actions are specified in "
         "`specs/001-backend-agent-scaffold/contracts/ui-dsl.md`, with renderable "
         "examples in `backend/fixtures/ui-plans/*.json`."
     ),

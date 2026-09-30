@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "httpx>=0.28.1",
+    "zai-sdk>=0.2.3",
 ]
 
 [dependency-groups]

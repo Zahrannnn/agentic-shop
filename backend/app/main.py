@@ -42,7 +42,9 @@ preference chips, cart views). No pages, no navigation.
 `text/event-stream` with a fixed lifecycle:
 
 ```
-status (progress stages) → message_delta (answer prose) → ui_update (full UI plan) → turn_end
+status (progress stages) → message_delta (answer prose)
+  → ui_update (full UI plan) → a2ui_update (optional A2UI projection, D10)
+  → turn_end
 ```
 
 On failure the stream ends with a single `error` frame instead of `turn_end`.
@@ -69,7 +71,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     application = FastAPI(
         title="agentic-shop API",
-        version="1.0.0",
+        version="1.1.0",
         summary="Conversational shopping agent with generated UI plans",
         description=_DESCRIPTION,
         openapi_tags=TAGS_METADATA,

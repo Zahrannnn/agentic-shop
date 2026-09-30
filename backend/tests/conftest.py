@@ -199,22 +199,32 @@ class ScriptedFakeLLM:
 
 @pytest.fixture
 def mock_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Force mock LLM mode with no credentials; reset any cached LLM client.
+    """Force mock LLM mode with no credentials; reset any cached clients.
 
     Use explicitly in tests (and test modules) that touch the LLM layer:
     sets ``LLM_MODE=mock`` and clears ``OPENCODE_API_KEY`` / ``LLM_MODEL``
-    for the duration of the test. ``app.llm.client`` is imported lazily so
-    this fixture also works before that module exists.
+    for the duration of the test — and, since D9, pins ``JEV_MODE=off`` with
+    an empty ``JEV_API_KEY`` so a developer's local ``.env`` (e.g.
+    ``JEV_MODE=real``) cannot leak real network calls into the suite. Env
+    vars beat the ``.env`` file in pydantic-settings, so SETTING an empty
+    key (not deleting it) is what makes this hermetic. ``app.llm`` modules
+    are imported lazily so this fixture also works before they exist.
     """
     monkeypatch.setenv("LLM_MODE", "mock")
     monkeypatch.delenv("OPENCODE_API_KEY", raising=False)
     monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.setenv("JEV_MODE", "off")
+    monkeypatch.setenv("JEV_API_KEY", "")
     try:
+        from app.config import get_settings
         from app.llm.client import reset_llm_cache
+        from app.llm.jev import reset_jev_cache
     except (ImportError, AttributeError):
         # app.llm.client is produced by a concurrent wave; nothing to reset yet.
         return
+    get_settings.cache_clear()
     reset_llm_cache()
+    reset_jev_cache()
 
 
 @pytest.fixture
