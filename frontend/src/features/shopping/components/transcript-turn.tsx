@@ -10,34 +10,98 @@ import { PlanRenderer } from "./plan-renderer";
 import { reassuranceFor } from "./thinking-copy";
 import type { A2uiMessage } from "../validations/a2ui-schema";
 import type { PlanAction, UiPlan } from "../validations/plan-schema";
-import { turnProse, type Turn } from "../store";
+import { STAGE_ORDER, turnProse, type Stage, type Turn } from "../store";
 
 /**
  * One transcript turn (Curator's Desk): the shopper's side (a right-aligned
  * Desk bubble for text, a quiet "▸ action" line for a tapped plan action),
  * then the agent's side — a thinking state while the agent works before prose
- * arrives (an elapsed-seconds counter, a rotating reassurance line, and a
- * skeleton), the streamed prose at the Body measure, a plan skeleton while
- * the plan document is being built, the rendered plan itself, and an inline
+ * arrives (an elapsed-seconds counter, plus a LIVE STAGE TRAIL driven by the
+ * `status` events once the first one lands: completed steps get a check, the
+ * current step is highlighted, and the searching step carries the live
+ * `found_n` count; before the first stage, a rotating reassurance line fills
+ * the gap), the streamed prose at the Body measure, a plan skeleton while the
+ * plan document is being built, the rendered plan itself, and an inline
  * Pencil-tone notice for a terminal error or a plan the validation gate
- * rejected. `turn_end` adds nothing. The internal lifecycle stages are
- * deliberately not rendered (UX review): the counter and reassurance copy
- * communicate honest progress without exposing pipeline vocabulary.
+ * rejected. `turn_end` adds nothing. Stage names render as curator-voice
+ * labels, never pipeline vocabulary; `found_n` folds into the searching step
+ * as a count rather than a step of its own.
  *
  * Only the latest turn's prose is a live region: the conversation log itself
  * is `role="log"` (implicitly polite), so history never re-announces.
  */
 
+/** Curator-voice labels for the lifecycle stages (FR-003 order). */
+const STAGE_LABELS: Record<Stage, string> = {
+  intent_parsed: "Understanding your ask",
+  searching: "Searching the catalog",
+  found_n: "Searching the catalog",
+  researching: "Reading reviews",
+  ranking: "Comparing the field",
+  building_ui: "Composing your results",
+};
+
+/**
+ * The live stage trail: one row per stage the backend has actually reported,
+ * in contracted order. The LAST seen stage is the current one (`aria-current`
+ * + emphasis); earlier rows are done (muted + check). `found_n` never renders
+ * as a row — it is the searching row's live count.
+ */
+function StageTrail({ turn }: { turn: Turn }) {
+  const seen = turn.stages;
+  if (seen.length === 0) {
+    return null;
+  }
+  const current = seen[seen.length - 1];
+  const currentKey: Stage = current === "found_n" ? "searching" : current;
+  const steps = STAGE_ORDER.filter(
+    (stage) => stage !== "found_n" && seen.includes(stage),
+  );
+  return (
+    <ol data-testid="turn-stages" className="space-y-1.5">
+      {steps.map((stage) => {
+        const isCurrent = stage === currentKey;
+        const count =
+          stage === "searching" && turn.foundCount !== undefined
+            ? ` · ${turn.foundCount} found`
+            : "";
+        return (
+          <li
+            key={stage}
+            data-testid={`turn-stage-${stage}`}
+            aria-current={isCurrent ? "step" : undefined}
+            className={cn(
+              "flex items-center gap-2 text-sm leading-[1.6]",
+              isCurrent ? "font-medium text-foreground" : "text-muted-foreground",
+            )}
+          >
+            <span
+              aria-hidden="true"
+              className={cn("w-3 shrink-0 text-center", isCurrent && "text-primary")}
+            >
+              {isCurrent ? "•" : "✓"}
+            </span>
+            <span>
+              {STAGE_LABELS[stage]}
+              {count}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 /**
  * The pre-prose thinking state (`role="status"`): `Thinking… Ns` counts the
- * real wait, a reassurance line rotates with the elapsed bucket (curator
- * voice, never pipeline words), and the skeleton lines stand in for the prose
- * to come. Text changes only — no new animation — so the global
- * reduced-motion collapse leaves this fully readable. The timer starts at 0
- * on mount and is cleared on unmount (StrictMode-safe: effect cleanup is the
- * only owner of the interval).
+ * real wait; once `status` events start arriving the reassurance line is
+ * replaced by the live stage trail (the wait is now measurable progress), and
+ * the skeleton lines stand in for the prose to come. Text changes only — no
+ * new animation — so the global reduced-motion collapse leaves this fully
+ * readable. The timer starts at 0 on mount and is cleared on unmount
+ * (StrictMode-safe: effect cleanup is the only owner of the interval).
  */
-function ThinkingBlock() {
+function ThinkingBlock({ turn }: { turn: Turn }) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
@@ -58,12 +122,16 @@ function ThinkingBlock() {
       <p className="text-xs font-medium tabular-nums text-muted-foreground">
         Thinking… {elapsedSeconds}s
       </p>
-      <p
-        data-testid="turn-reassurance"
-        className="text-xs leading-[1.6] text-muted-foreground"
-      >
-        {reassuranceFor(elapsedSeconds)}
-      </p>
+      {turn.stages.length > 0 ? (
+        <StageTrail turn={turn} />
+      ) : (
+        <p
+          data-testid="turn-reassurance"
+          className="text-xs leading-[1.6] text-muted-foreground"
+        >
+          {reassuranceFor(elapsedSeconds)}
+        </p>
+      )}
       <Skeleton className="h-4 w-3/4" />
       <Skeleton className="h-4 w-2/3" />
       <Skeleton className="h-4 w-1/2" />
@@ -119,7 +187,7 @@ export function TranscriptTurn({
       ) : null}
 
       <div className="space-y-4">
-        {waitingForProse ? <ThinkingBlock /> : null}
+        {waitingForProse ? <ThinkingBlock turn={turn} /> : null}
 
         {turn.deltas.length > 0 ? (
           <p

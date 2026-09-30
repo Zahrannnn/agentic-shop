@@ -433,6 +433,76 @@ describe("ShopPage thinking states", () => {
     );
   });
 
+  it("renders the live stage trail from the status events (curator labels)", () => {
+    setHook({
+      phase: "streaming",
+      isBusy: true,
+      turns: [
+        makeTurn({
+          id: 1,
+          userText: "recommend headphones",
+          stages: ["intent_parsed", "searching"],
+          foundCount: 7,
+        }),
+      ],
+    });
+    render(<ShopPage />);
+
+    // Once stages stream in, the reassurance line is replaced by the trail.
+    expect(screen.queryByTestId("turn-reassurance")).not.toBeInTheDocument();
+
+    const done = screen.getByTestId("turn-stage-intent_parsed");
+    expect(done).toHaveTextContent("Understanding your ask");
+    expect(done).not.toHaveAttribute("aria-current");
+
+    const searching = screen.getByTestId("turn-stage-searching");
+    expect(searching).toHaveAttribute("aria-current", "step");
+    expect(searching).toHaveTextContent("Searching the catalog");
+    expect(searching).toHaveTextContent("7 found");
+
+    // found_n folds into the searching row — it never renders as a step.
+    expect(screen.queryByTestId("turn-stage-found_n")).not.toBeInTheDocument();
+    // Upcoming stages are not telegraphed.
+    expect(screen.queryByTestId("turn-stage-building_ui")).not.toBeInTheDocument();
+  });
+
+  it("marks building_ui as the current step once the plan is being composed", () => {
+    setHook({
+      phase: "streaming",
+      isBusy: true,
+      turns: [
+        makeTurn({
+          id: 1,
+          userText: "recommend headphones",
+          stages: [
+            "intent_parsed",
+            "searching",
+            "found_n",
+            "researching",
+            "ranking",
+            "building_ui",
+          ],
+          foundCount: 7,
+        }),
+      ],
+    });
+    render(<ShopPage />);
+
+    expect(
+      screen.getByTestId("turn-stage-building_ui"),
+    ).toHaveAttribute("aria-current", "step");
+    expect(screen.getByTestId("turn-stage-building_ui")).toHaveTextContent(
+      "Composing your results",
+    );
+    // The searching step keeps its count and is done.
+    expect(screen.getByTestId("turn-stage-searching")).toHaveTextContent(
+      "7 found",
+    );
+    expect(
+      screen.getByTestId("turn-stage-searching"),
+    ).not.toHaveAttribute("aria-current");
+  });
+
   it("rotates the reassurance line by elapsed bucket while thinking", () => {
     vi.useFakeTimers();
     setHook({
